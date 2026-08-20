@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
 import { useDocumentStore } from "../../store/useDocumentStore";
+import type { Asset } from "../../types";
 
 // Initialize markdown-it with highlight.js
 const md = MarkdownIt({
@@ -38,8 +39,9 @@ md.renderer.rules.image = function (tokens, idx, options, env, self) {
   const src = token.attrGet("src") ?? "";
 
   // If src is a reference ID like "img_001", resolve from assets
-  if (env.assets && src in env.assets) {
-    const asset = env.assets[src];
+  const assets = (env as { assets?: Record<string, Asset> } | undefined)?.assets;
+  if (assets && src in assets) {
+    const asset = assets[src];
     token.attrSet("src", `data:${asset.mime};base64,${asset.base64}`);
   }
 

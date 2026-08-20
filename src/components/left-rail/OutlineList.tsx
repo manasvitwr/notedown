@@ -1,4 +1,6 @@
+import { useMemo } from "react";
 import { useDocumentStore } from "../../store/useDocumentStore";
+import { formatBlockTime } from "../../lib/dates";
 import { FileText, Link, Code, Mic, Image, Layers } from "lucide-react";
 import type { BlockType } from "../../types";
 
@@ -12,7 +14,23 @@ const typeIcons: Record<BlockType, React.ReactNode> = {
 };
 
 export function OutlineList() {
-  const outline = useDocumentStore((s) => s.getOutline());
+  const doc = useDocumentStore((s) => s.doc);
+
+  // Derive outline locally — calling s.getOutline() inside the selector
+  // returns a fresh array every time, which sends zustand v5's
+  // useSyncExternalStore into an infinite re-render loop (blank screen).
+  const outline = useMemo(() => {
+    if (!doc) return [];
+    return doc.blocks.map((b) => {
+      const time = formatBlockTime(b.createdAt, doc.settings.timezone);
+      const typeLabel = b.type === "image" ? "screenshot" : b.type;
+      return {
+        id: b.id,
+        label: `${time} · ${typeLabel}`,
+        type: b.type,
+      };
+    });
+  }, [doc]);
 
   if (outline.length === 0) {
     return (

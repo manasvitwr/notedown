@@ -1,4 +1,4 @@
-import type { Asset, Block, BlockType, DocumentState, ImageMime } from "../types";
+import type { Asset, Block, BlockType, DocumentState, ImageMime, StorageMode } from "../types";
 import { DEFAULT_SETTINGS } from "../constants/defaults";
 import { nanoid } from "nanoid";
 
@@ -70,7 +70,7 @@ export function parseNotedownFile(
     blocks,
     assets,
     settings: {
-      storageMode: frontmatter.storage ?? DEFAULT_SETTINGS.storageMode,
+      storageMode: (frontmatter.storage as StorageMode | undefined) ?? DEFAULT_SETTINGS.storageMode,
       imageMaxWidth:
         frontmatter.image_max_width ?? DEFAULT_SETTINGS.imageMaxWidth,
       imageQuality:

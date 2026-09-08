@@ -15,6 +15,7 @@ export function EditorPane() {
   const setEditorMode = useDocumentStore((s) => s.setEditorMode);
   const serializedMarkdown = useDocumentStore((s) => s.serializedMarkdown);
   const setDocument = useDocumentStore((s) => s.setDocument);
+  const reserialize = useDocumentStore((s) => s.reserialize);
 
   // Local editor state — only used in markdown mode
   const [localMarkdown, setLocalMarkdown] = useState("");
@@ -24,8 +25,10 @@ export function EditorPane() {
   const handleModeChange = useCallback(
     (mode: EditorMode) => {
       if (mode === "markdown" && editorMode !== "markdown") {
-        // Entering markdown edit mode: populate from serialized
-        setLocalMarkdown(serializedMarkdown);
+        // Entering markdown edit mode: reserialize and populate from serialized
+        reserialize();
+        const freshMd = useDocumentStore.getState().serializedMarkdown;
+        setLocalMarkdown(freshMd);
         setIsEditing(true);
       } else if (editorMode === "markdown" && mode !== "markdown" && isEditing) {
         // Leaving markdown edit mode: sync back to store
@@ -34,7 +37,7 @@ export function EditorPane() {
       }
       setEditorMode(mode);
     },
-    [editorMode, serializedMarkdown, localMarkdown, isEditing, setEditorMode]
+    [editorMode, serializedMarkdown, localMarkdown, isEditing, setEditorMode, reserialize]
   );
 
   // Sync edited markdown back to structured state

@@ -1,11 +1,15 @@
 import type { Block, Asset, DocumentState } from "../types";
 import { classifyText } from "./blockClassifier";
 import { compressImage } from "./imageCompression";
-import { nextBlockId, nextAssetId } from "./ids";
 
 export interface PasteResult {
   blocks: Block[];
   assets: Asset[];
+}
+
+export interface IdAllocator {
+  allocateBlockId: () => string;
+  allocateAssetId: () => string;
 }
 
 /**
@@ -13,7 +17,8 @@ export interface PasteResult {
  */
 export async function processPaste(
   event: ClipboardEvent,
-  doc: DocumentState
+  doc: DocumentState,
+  allocator: IdAllocator
 ): Promise<PasteResult> {
   const items = Array.from(event.clipboardData?.items ?? []);
   const now = new Date().toISOString();
@@ -21,23 +26,19 @@ export async function processPaste(
   const blocks: Block[] = [];
   const assets: Asset[] = [];
 
-  // Track IDs across this paste batch
-  let currentDoc = { ...doc, blocks: [...doc.blocks], assets: { ...doc.assets } };
-
   // ─── Process images ──────────────────────────────────────
   const imageItems = items.filter((i) => i.type.startsWith("image/"));
   for (const item of imageItems) {
     const file = item.getAsFile();
     if (!file) continue;
 
-    const assetId = nextAssetId(currentDoc);
+    const assetId = allocator.allocateAssetId();
 
     try {
       const { asset } = await compressImage(file, assetId, doc.settings);
       assets.push(asset);
-      currentDoc.assets[asset.id] = asset;
 
-      const blockId = nextBlockId(currentDoc);
+      const blockId = allocator.allocateBlockId();
       const block: Block = {
         id: blockId,
         type: "image",
@@ -48,7 +49,6 @@ export async function processPaste(
         source: "clipboard",
       };
       blocks.push(block);
-      currentDoc.blocks.push(block);
     } catch (err) {
       console.error("Image compression failed:", err);
       // Fallback: try to read raw base64
@@ -67,9 +67,8 @@ export async function processPaste(
           alt: "screenshot",
         };
         assets.push(fallbackAsset);
-        currentDoc.assets[fallbackAsset.id] = fallbackAsset;
 
-        const blockId = nextBlockId(currentDoc);
+        const blockId = allocator.allocateBlockId();
         const block: Block = {
           id: blockId,
           type: "image",
@@ -80,7 +79,6 @@ export async function processPaste(
           source: "clipboard",
         };
         blocks.push(block);
-        currentDoc.blocks.push(block);
       } catch {
         console.error("Fallback image read also failed");
       }
@@ -102,7 +100,7 @@ export async function processPaste(
     }
 
     const classified = classifyText(text);
-    const blockId = nextBlockId(currentDoc);
+    const blockId = allocator.allocateBlockId();
     const block: Block = {
       id: blockId,
       type: classified.type,
@@ -113,7 +111,6 @@ export async function processPaste(
       source: "clipboard",
     };
     blocks.push(block);
-    currentDoc.blocks.push(block);
   }
 
   return { blocks, assets };

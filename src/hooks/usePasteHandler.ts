@@ -10,12 +10,11 @@ export function usePasteHandler() {
   const doc = useDocumentStore((s) => s.doc);
   const appendBlocks = useDocumentStore((s) => s.appendBlocks);
   const editorMode = useDocumentStore((s) => s.editorMode);
+  const allocateBlockId = useDocumentStore((s) => s.allocateBlockId);
+  const allocateAssetId = useDocumentStore((s) => s.allocateAssetId);
 
   useEffect(() => {
     const handler = async (event: ClipboardEvent) => {
-      // Only intercept paste when NOT in the markdown editor textarea
-      // (let the textarea handle its own paste naturally? — No.
-      // We always intercept to create structured blocks.)
       if (!doc) return;
 
       // If user is editing in the markdown textarea, let native paste work
@@ -30,7 +29,10 @@ export function usePasteHandler() {
       event.preventDefault();
 
       try {
-        const { blocks, assets } = await processPaste(event, doc);
+        const { blocks, assets } = await processPaste(event, doc, {
+          allocateBlockId,
+          allocateAssetId,
+        });
         if (blocks.length > 0) {
           appendBlocks(blocks, assets);
         }
@@ -41,5 +43,5 @@ export function usePasteHandler() {
 
     document.addEventListener("paste", handler);
     return () => document.removeEventListener("paste", handler);
-  }, [doc, appendBlocks, editorMode]);
+  }, [doc, appendBlocks, editorMode, allocateBlockId, allocateAssetId]);
 }

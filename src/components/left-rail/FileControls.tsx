@@ -17,7 +17,7 @@ export function FileControls({ onNew, onOpen, onExport, filename }: FileControls
         <button
           onClick={onNew}
           className="flex items-center gap-1 px-2 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-[var(--radius-xs)] transition-colors"
-          title="New note (Ctrl+N)"
+          title="New note (Ctrl+Alt+N)"
         >
           <FilePlus size={13} />
           <span>new</span>

@@ -8,7 +8,7 @@ import type {
   SaveStatus,
   RecentDoc,
 } from "../types";
-import { createEmptyDocument } from "../constants/defaults";
+import { createEmptyDocument, BLOCK_PREFIX, ASSET_PREFIX } from "../constants/defaults";
 import { serializeDocument } from "../lib/markdownSerializer";
 import { saveDocument, loadActiveDocument, getRecentDocuments } from "../lib/storage";
 import { stringByteSize, calculatePortableScore } from "../lib/size";
@@ -110,8 +110,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       blocks: [...doc.blocks, block],
       updatedAt: new Date().toISOString(),
     };
-    const md = serializeDocument(updated);
-    set({ doc: updated, serializedMarkdown: md, saveStatus: "unsaved" });
+    // Defer serialization — recomputed lazily when needed (export, mode switch, etc.)
+    set({ doc: updated, saveStatus: "unsaved" });
   },
 
   appendBlocks: (blocks: Block[], assets: Asset[]) => {
@@ -127,14 +127,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       assets: newAssets,
       updatedAt: new Date().toISOString(),
     };
-    const md = serializeDocument(updated);
-    set({ doc: updated, serializedMarkdown: md, saveStatus: "unsaved" });
+    // Defer serialization — recomputed lazily when needed
+    set({ doc: updated, saveStatus: "unsaved" });
   },
 
   deleteBlock: (blockId: string) => {
     const { doc } = get();
     if (!doc) return;
-    const deletedBlock = doc.blocks.find((b) => b.id === blockId);
     const remainingBlocks = doc.blocks.filter((b) => b.id !== blockId);
 
     // Clean up orphaned assets: remove assets no longer referenced by any block
@@ -154,8 +153,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       assets: cleanedAssets,
       updatedAt: new Date().toISOString(),
     };
-    const md = serializeDocument(updated);
-    set({ doc: updated, serializedMarkdown: md, saveStatus: "unsaved" });
+    // Defer serialization — recomputed lazily when needed
+    set({ doc: updated, saveStatus: "unsaved" });
   },
 
   // ─── Asset Actions ──────────────────────────────────────
@@ -244,13 +243,24 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   // ─── Derived ────────────────────────────────────────────
 
   getFileSize: () => {
-    const { serializedMarkdown } = get();
-    return stringByteSize(serializedMarkdown);
+    const { doc, serializedMarkdown } = get();
+    // Use cached serializedMarkdown if available, otherwise estimate from doc
+    if (serializedMarkdown) return stringByteSize(serializedMarkdown);
+    if (!doc) return 0;
+    // Quick estimate without full serialization
+    return doc.blocks.reduce((sum, b) => sum + b.content.length, 0) +
+      Object.values(doc.assets).reduce((sum, a) => sum + a.base64.length, 0);
   },
 
   getPortableScore: () => {
-    const { serializedMarkdown } = get();
-    return calculatePortableScore(stringByteSize(serializedMarkdown));
+    const { doc, serializedMarkdown } = get();
+    const size = serializedMarkdown
+      ? stringByteSize(serializedMarkdown)
+      : doc
+        ? doc.blocks.reduce((sum, b) => sum + b.content.length, 0) +
+          Object.values(doc.assets).reduce((sum, a) => sum + a.base64.length, 0)
+        : 0;
+    return calculatePortableScore(size);
   },
 
   getOutline: () => {

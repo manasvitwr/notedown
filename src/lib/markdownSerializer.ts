@@ -30,7 +30,7 @@ export function serializeDocument(doc: DocumentState): string {
     const typeLabel = block.type === "image" ? "screenshot" : block.type;
 
     parts.push(
-      `<!-- nd:block ${block.id} ${block.type} ${block.createdAt} -->`
+      `<!-- nd:block ${block.id} ${block.type} ${block.createdAt}${block.collapsed ? " collapsed" : ""} -->`
     );
     parts.push(`## ${time} · ${typeLabel}`);
     parts.push("");

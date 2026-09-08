@@ -33,6 +33,8 @@ interface DocumentStore {
   appendBlock: (block: Block) => void;
   appendBlocks: (blocks: Block[], assets: Asset[]) => void;
   deleteBlock: (blockId: string) => void;
+  moveBlock: (blockId: string, direction: "up" | "down") => void;
+  toggleBlockCollapse: (blockId: string) => void;
 
   // ─── Asset Actions ──────────────────────────────────────
   addAsset: (asset: Asset) => void;
@@ -109,9 +111,55 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   deleteBlock: (blockId: string) => {
     const { doc } = get();
     if (!doc) return;
+    const remainingBlocks = doc.blocks.filter((b) => b.id !== blockId);
+
+    // Clean up orphaned assets
+    const remainingAssetIds = new Set(
+      remainingBlocks.flatMap((b) => b.assetIds)
+    );
+    const cleanedAssets: Record<string, Asset> = {};
+    for (const [id, asset] of Object.entries(doc.assets)) {
+      if (remainingAssetIds.has(id)) {
+        cleanedAssets[id] = asset;
+      }
+    }
+
     const updated: DocumentState = {
       ...doc,
-      blocks: doc.blocks.filter((b) => b.id !== blockId),
+      blocks: remainingBlocks,
+      assets: cleanedAssets,
+      updatedAt: new Date().toISOString(),
+    };
+    const md = serializeDocument(updated);
+    set({ doc: updated, serializedMarkdown: md, saveStatus: "unsaved" });
+  },
+
+  moveBlock: (blockId: string, direction: "up" | "down") => {
+    const { doc } = get();
+    if (!doc) return;
+    const idx = doc.blocks.findIndex((b) => b.id === blockId);
+    if (idx === -1) return;
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= doc.blocks.length) return;
+    const newBlocks = [...doc.blocks];
+    [newBlocks[idx], newBlocks[targetIdx]] = [newBlocks[targetIdx], newBlocks[idx]];
+    const updated: DocumentState = {
+      ...doc,
+      blocks: newBlocks,
+      updatedAt: new Date().toISOString(),
+    };
+    const md = serializeDocument(updated);
+    set({ doc: updated, serializedMarkdown: md, saveStatus: "unsaved" });
+  },
+
+  toggleBlockCollapse: (blockId: string) => {
+    const { doc } = get();
+    if (!doc) return;
+    const updated: DocumentState = {
+      ...doc,
+      blocks: doc.blocks.map((b) =>
+        b.id === blockId ? { ...b, collapsed: !b.collapsed } : b
+      ),
       updatedAt: new Date().toISOString(),
     };
     const md = serializeDocument(updated);

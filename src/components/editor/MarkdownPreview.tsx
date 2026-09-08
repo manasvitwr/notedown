@@ -77,10 +77,21 @@ export function MarkdownPreview({ markdown }: MarkdownPreviewProps) {
     return result;
   }, [markdown, doc]);
 
-  const html = useMemo(
-    () => md.render(processedMarkdown),
-    [processedMarkdown]
-  );
+  const html = useMemo(() => {
+    const rendered = md.render(processedMarkdown);
+    // Post-process: convert block markers into scrollable anchor divs.
+    // Collapsed blocks get a CSS class that hides their content.
+    return rendered
+      .replace(
+        /<!-- nd:block (\S+) \S+ \S+ collapsed -->([\s\S]*?)<!-- nd:endblock \1 -->/g,
+        '<div id="block-$1" class="nd-block-anchor nd-block-collapsed">$2</div>'
+      )
+      .replace(
+        /<!-- nd:block (\S+) \S+ \S+ -->([\s\S]*?)<!-- nd:endblock \1 -->/g,
+        '<div id="block-$1" class="nd-block-anchor">$2</div>'
+      )
+      .replace(/<!-- nd:\w+ -->/g, "");
+  }, [processedMarkdown]);
 
   return (
     <div

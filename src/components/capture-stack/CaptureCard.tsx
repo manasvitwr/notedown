@@ -1,7 +1,7 @@
 import type { Block } from "../../types";
 import { formatBlockTime } from "../../lib/dates";
 import { useDocumentStore } from "../../store/useDocumentStore";
-import { FileText, Link, Code, Mic, Image, Layers } from "lucide-react";
+import { FileText, Link, Code, Mic, Image, Layers, ChevronUp, ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
 import type { BlockType } from "../../types";
 
 const typeConfig: Record<
@@ -46,8 +46,13 @@ interface CaptureCardProps {
 
 export function CaptureCard({ block }: CaptureCardProps) {
   const doc = useDocumentStore((s) => s.doc);
+  const moveBlock = useDocumentStore((s) => s.moveBlock);
+  const toggleBlockCollapse = useDocumentStore((s) => s.toggleBlockCollapse);
   const config = typeConfig[block.type];
   const timezone = doc?.settings.timezone;
+  const blockIndex = doc?.blocks.findIndex((b) => b.id === block.id) ?? -1;
+  const isFirst = blockIndex === 0;
+  const isLast = blockIndex === (doc?.blocks.length ?? 0) - 1;
 
   // Get preview text (first 120 chars, strip markdown)
   const preview = block.content
@@ -91,7 +96,7 @@ export function CaptureCard({ block }: CaptureCardProps) {
           </div>
         )}
 
-        {/* Footer: badge + time */}
+        {/* Footer: badge + time + controls */}
         <div className="flex items-center justify-between">
           <span
             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${config.color}`}
@@ -99,9 +104,34 @@ export function CaptureCard({ block }: CaptureCardProps) {
             {config.icon}
             {config.label}
           </span>
-          <span className="text-[10px] text-text-dim">
-            {formatBlockTime(block.createdAt, timezone)}
-          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); moveBlock(block.id, "up"); }}
+              disabled={isFirst}
+              className="p-0.5 rounded hover:bg-bg-hover text-text-dim disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Move up"
+            >
+              <ChevronUp size={12} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); moveBlock(block.id, "down"); }}
+              disabled={isLast}
+              className="p-0.5 rounded hover:bg-bg-hover text-text-dim disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Move down"
+            >
+              <ChevronDown size={12} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleBlockCollapse(block.id); }}
+              className="p-0.5 rounded hover:bg-bg-hover text-text-dim"
+              title={block.collapsed ? "Expand" : "Collapse"}
+            >
+              {block.collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
+            </button>
+            <span className="text-[10px] text-text-dim">
+              {formatBlockTime(block.createdAt, timezone)}
+            </span>
+          </div>
         </div>
       </div>
     </button>

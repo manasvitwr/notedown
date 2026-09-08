@@ -84,7 +84,7 @@ export function parseNotedownFile(
 /**
  * Fallback: import a plain .md file as a single text block.
  */
-function createPlainImport(
+export function createPlainImport(
   raw: string,
   filename: string
 ): DocumentState {

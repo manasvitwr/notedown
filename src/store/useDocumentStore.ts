@@ -109,9 +109,24 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   deleteBlock: (blockId: string) => {
     const { doc } = get();
     if (!doc) return;
+    const deletedBlock = doc.blocks.find((b) => b.id === blockId);
+    const remainingBlocks = doc.blocks.filter((b) => b.id !== blockId);
+
+    // Clean up orphaned assets: remove assets no longer referenced by any block
+    const remainingAssetIds = new Set(
+      remainingBlocks.flatMap((b) => b.assetIds)
+    );
+    const cleanedAssets: Record<string, Asset> = {};
+    for (const [id, asset] of Object.entries(doc.assets)) {
+      if (remainingAssetIds.has(id)) {
+        cleanedAssets[id] = asset;
+      }
+    }
+
     const updated: DocumentState = {
       ...doc,
-      blocks: doc.blocks.filter((b) => b.id !== blockId),
+      blocks: remainingBlocks,
+      assets: cleanedAssets,
       updatedAt: new Date().toISOString(),
     };
     const md = serializeDocument(updated);

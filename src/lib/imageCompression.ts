@@ -37,22 +37,24 @@ export async function compressImage(
   ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
   bitmap.close();
 
-  // 4. Export as preferred format, fallback to JPEG
-  let blob: Blob;
-  let mime: ImageMime = preferredImageMime;
-  try {
-    blob = await canvas.convertToBlob({
-      type: preferredImageMime,
-      quality: imageQuality,
-    });
-  } catch {
-    // WebP not supported — fallback to JPEG
-    mime = "image/jpeg";
-    blob = await canvas.convertToBlob({
-      type: "image/jpeg",
-      quality: imageQuality,
-    });
+  // 4. Detect codec support and choose target format
+  let targetMime: ImageMime = preferredImageMime;
+  if (!(await isCodecSupported(preferredImageMime))) {
+    // Preferred codec not supported — try JPEG, then PNG
+    if (await isCodecSupported("image/jpeg")) {
+      targetMime = "image/jpeg";
+    } else {
+      targetMime = "image/png";
+    }
   }
+
+  // 5. Encode to chosen format
+  const blob = await canvas.convertToBlob({
+    type: targetMime,
+    quality: imageQuality,
+  });
+  // Use the actual blob type (may differ from requested if browser fell back)
+  const mime = (blob.type || targetMime) as ImageMime;
 
   // 5. Convert to base64
   const buffer = await blob.arrayBuffer();
@@ -87,4 +89,19 @@ export async function compressImage(
  */
 export function assetToDataUri(asset: Asset): string {
   return `data:${asset.mime};base64,${asset.base64}`;
+}
+
+/**
+ * Detect whether the browser can encode a given image MIME type
+ * using OffscreenCanvas. Returns false for unsupported codecs.
+ */
+async function isCodecSupported(mime: string): Promise<boolean> {
+  try {
+    const canvas = new OffscreenCanvas(1, 1);
+    const blob = await canvas.convertToBlob({ type: mime, quality: 0.5 });
+    // If the returned blob type doesn't match, the browser fell back
+    return blob.type === mime;
+  } catch {
+    return false;
+  }
 }

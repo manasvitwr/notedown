@@ -9,6 +9,7 @@ export function useAutosave() {
   const doc = useDocumentStore((s) => s.doc);
   const saveStatus = useDocumentStore((s) => s.saveStatus);
   const saveToStorage = useDocumentStore((s) => s.saveToStorage);
+  const reserialize = useDocumentStore((s) => s.reserialize);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export function useAutosave() {
 
     // Debounce save
     timerRef.current = setTimeout(() => {
+      reserialize();
       saveToStorage();
     }, AUTOSAVE_DEBOUNCE_MS);
 
@@ -30,5 +32,5 @@ export function useAutosave() {
         clearTimeout(timerRef.current);
       }
     };
-  }, [doc, saveStatus, saveToStorage]);
+  }, [doc, saveStatus, saveToStorage, reserialize]);
 }

@@ -8,7 +8,7 @@ import type {
   SaveStatus,
   RecentDoc,
 } from "../types";
-import { createEmptyDocument } from "../constants/defaults";
+import { createEmptyDocument, BLOCK_PREFIX, ASSET_PREFIX } from "../constants/defaults";
 import { serializeDocument } from "../lib/markdownSerializer";
 import { saveDocument, loadActiveDocument, getRecentDocuments } from "../lib/storage";
 import { stringByteSize, calculatePortableScore } from "../lib/size";
@@ -25,6 +25,10 @@ interface DocumentStore {
   recentDocs: RecentDoc[];
   serializedMarkdown: string;
 
+  // ─── Monotonic ID counters (never reused after deletion) ─
+  nextBlockNum: number;
+  nextAssetNum: number;
+
   // ─── Document Actions ───────────────────────────────────
   newDocument: (title: string) => void;
   setDocument: (doc: DocumentState) => void;
@@ -38,6 +42,10 @@ interface DocumentStore {
 
   // ─── Asset Actions ──────────────────────────────────────
   addAsset: (asset: Asset) => void;
+
+  // ─── ID Allocation (atomic, monotonic) ──────────────────
+  allocateBlockId: () => string;
+  allocateAssetId: () => string;
 
   // ─── Editor ─────────────────────────────────────────────
   setEditorMode: (mode: EditorMode) => void;
@@ -63,18 +71,35 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   lastSavedAt: null,
   recentDocs: [],
   serializedMarkdown: "",
+  nextBlockNum: 1,
+  nextAssetNum: 1,
 
   // ─── Document Actions ───────────────────────────────────
 
   newDocument: (title: string) => {
     const doc = createEmptyDocument(nanoid(), title);
     const md = serializeDocument(doc);
-    set({ doc, serializedMarkdown: md, saveStatus: "unsaved" });
+    set({ doc, serializedMarkdown: md, saveStatus: "unsaved", nextBlockNum: 1, nextAssetNum: 1 });
   },
 
   setDocument: (doc: DocumentState) => {
     const md = serializeDocument(doc);
-    set({ doc, serializedMarkdown: md, saveStatus: "unsaved" });
+    // Initialize counters to be beyond any existing IDs
+    const maxBlockNum = doc.blocks.reduce((max, b) => {
+      const num = parseInt(b.id.replace(BLOCK_PREFIX, ""), 10);
+      return num > max ? num : max;
+    }, 0);
+    const maxAssetNum = Object.keys(doc.assets).reduce((max, id) => {
+      const num = parseInt(id.replace(ASSET_PREFIX, ""), 10);
+      return num > max ? num : max;
+    }, 0);
+    set({
+      doc,
+      serializedMarkdown: md,
+      saveStatus: "unsaved",
+      nextBlockNum: maxBlockNum + 1,
+      nextAssetNum: maxAssetNum + 1,
+    });
   },
 
   // ─── Block Actions ──────────────────────────────────────
@@ -87,8 +112,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       blocks: [...doc.blocks, block],
       updatedAt: new Date().toISOString(),
     };
-    const md = serializeDocument(updated);
-    set({ doc: updated, serializedMarkdown: md, saveStatus: "unsaved" });
+    // Defer serialization — recomputed lazily when needed (export, mode switch, etc.)
+    set({ doc: updated, saveStatus: "unsaved" });
   },
 
   appendBlocks: (blocks: Block[], assets: Asset[]) => {
@@ -104,8 +129,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       assets: newAssets,
       updatedAt: new Date().toISOString(),
     };
-    const md = serializeDocument(updated);
-    set({ doc: updated, serializedMarkdown: md, saveStatus: "unsaved" });
+    // Defer serialization — recomputed lazily when needed
+    set({ doc: updated, saveStatus: "unsaved" });
   },
 
   deleteBlock: (blockId: string) => {
@@ -113,7 +138,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!doc) return;
     const remainingBlocks = doc.blocks.filter((b) => b.id !== blockId);
 
-    // Clean up orphaned assets
+    // Clean up orphaned assets: remove assets no longer referenced by any block
     const remainingAssetIds = new Set(
       remainingBlocks.flatMap((b) => b.assetIds)
     );
@@ -130,8 +155,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       assets: cleanedAssets,
       updatedAt: new Date().toISOString(),
     };
-    const md = serializeDocument(updated);
-    set({ doc: updated, serializedMarkdown: md, saveStatus: "unsaved" });
+    // Defer serialization — recomputed lazily when needed
+    set({ doc: updated, saveStatus: "unsaved" });
   },
 
   moveBlock: (blockId: string, direction: "up" | "down") => {
@@ -148,8 +173,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       blocks: newBlocks,
       updatedAt: new Date().toISOString(),
     };
-    const md = serializeDocument(updated);
-    set({ doc: updated, serializedMarkdown: md, saveStatus: "unsaved" });
+    // Defer serialization — recomputed lazily when needed
+    set({ doc: updated, saveStatus: "unsaved" });
   },
 
   toggleBlockCollapse: (blockId: string) => {
@@ -162,8 +187,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       ),
       updatedAt: new Date().toISOString(),
     };
-    const md = serializeDocument(updated);
-    set({ doc: updated, serializedMarkdown: md, saveStatus: "unsaved" });
+    // Defer serialization — recomputed lazily when needed
+    set({ doc: updated, saveStatus: "unsaved" });
   },
 
   // ─── Asset Actions ──────────────────────────────────────
@@ -177,6 +202,22 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       updatedAt: new Date().toISOString(),
     };
     set({ doc: updated, saveStatus: "unsaved" });
+  },
+
+  // ─── ID Allocation (atomic, monotonic) ──────────────────
+
+  allocateBlockId: () => {
+    const { nextBlockNum } = get();
+    const id = `${BLOCK_PREFIX}${String(nextBlockNum).padStart(3, "0")}`;
+    set({ nextBlockNum: nextBlockNum + 1 });
+    return id;
+  },
+
+  allocateAssetId: () => {
+    const { nextAssetNum } = get();
+    const id = `${ASSET_PREFIX}${String(nextAssetNum).padStart(3, "0")}`;
+    set({ nextAssetNum: nextAssetNum + 1 });
+    return id;
   },
 
   // ─── Editor ─────────────────────────────────────────────
@@ -236,13 +277,24 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   // ─── Derived ────────────────────────────────────────────
 
   getFileSize: () => {
-    const { serializedMarkdown } = get();
-    return stringByteSize(serializedMarkdown);
+    const { doc, serializedMarkdown } = get();
+    // Use cached serializedMarkdown if available, otherwise estimate from doc
+    if (serializedMarkdown) return stringByteSize(serializedMarkdown);
+    if (!doc) return 0;
+    // Quick estimate without full serialization
+    return doc.blocks.reduce((sum, b) => sum + b.content.length, 0) +
+      Object.values(doc.assets).reduce((sum, a) => sum + a.base64.length, 0);
   },
 
   getPortableScore: () => {
-    const { serializedMarkdown } = get();
-    return calculatePortableScore(stringByteSize(serializedMarkdown));
+    const { doc, serializedMarkdown } = get();
+    const size = serializedMarkdown
+      ? stringByteSize(serializedMarkdown)
+      : doc
+        ? doc.blocks.reduce((sum, b) => sum + b.content.length, 0) +
+          Object.values(doc.assets).reduce((sum, a) => sum + a.base64.length, 0)
+        : 0;
+    return calculatePortableScore(size);
   },
 
   getOutline: () => {

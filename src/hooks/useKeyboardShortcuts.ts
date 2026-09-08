@@ -32,8 +32,11 @@ export function useKeyboardShortcuts({ onNew, onImport }: ShortcutActions) {
           break;
 
         case "n":
-          e.preventDefault();
-          onNew();
+          if (e.altKey) {
+            // Ctrl+Alt+N / Cmd+Alt+N — browsers reserve plain Ctrl+N
+            e.preventDefault();
+            onNew();
+          }
           break;
 
         case "e":

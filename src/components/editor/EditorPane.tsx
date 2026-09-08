@@ -9,12 +9,46 @@ import { useDocumentStore } from "../../store/useDocumentStore";
 import { parseNotedownFile } from "../../lib/markdownParser";
 import type { EditorMode } from "../../types";
 
+/**
+ * Extract text that appears outside <!-- nd:block --> / <!-- nd:endblock --> fences
+ * in a .nd.md markdown string. This catches content pasted in markdown mode
+ * that wasn't wrapped in block comment markers.
+ */
+function extractFreeTextOutsideBlocks(
+  md: string,
+  existingBlockCount: number
+): string {
+  // Remove frontmatter
+  const noFrontmatter = md.replace(/^---\n[\s\S]*?\n---\n*/, "");
+  // Remove all nd:block...nd:endblock sections
+  const noBlocks = noFrontmatter.replace(
+    /<!-- nd:block \S+ \S+ \S+ -->[\s\S]*?<!-- nd:endblock \1 -->/g,
+    ""
+  );
+  // Remove nd:data section
+  const noData = noBlocks.replace(
+    /<!-- nd:data -->[\s\S]*?<!-- nd:enddata -->/g,
+    ""
+  );
+  // Strip the title line (# ...)
+  const stripped = noData.replace(/^#\s+.+\n?/m, "");
+  // Strip block heading lines (## HH:MM · type)
+  const cleaned = stripped
+    .split("\n")
+    .filter((line) => !/^##\s+\d{2}:\d{2}\s+·\s+\S+/.test(line))
+    .join("\n");
+
+  // Only return if there's meaningful content (not just whitespace)
+  return cleaned.trim();
+}
+
 export function EditorPane() {
   const doc = useDocumentStore((s) => s.doc);
   const editorMode = useDocumentStore((s) => s.editorMode);
   const setEditorMode = useDocumentStore((s) => s.setEditorMode);
   const serializedMarkdown = useDocumentStore((s) => s.serializedMarkdown);
   const setDocument = useDocumentStore((s) => s.setDocument);
+  const reserialize = useDocumentStore((s) => s.reserialize);
 
   // Local editor state — only used in markdown mode
   const [localMarkdown, setLocalMarkdown] = useState("");
@@ -24,8 +58,10 @@ export function EditorPane() {
   const handleModeChange = useCallback(
     (mode: EditorMode) => {
       if (mode === "markdown" && editorMode !== "markdown") {
-        // Entering markdown edit mode: populate from serialized
-        setLocalMarkdown(serializedMarkdown);
+        // Entering markdown edit mode: reserialize and populate from serialized
+        reserialize();
+        const freshMd = useDocumentStore.getState().serializedMarkdown;
+        setLocalMarkdown(freshMd);
         setIsEditing(true);
       } else if (editorMode === "markdown" && mode !== "markdown" && isEditing) {
         // Leaving markdown edit mode: sync back to store
@@ -34,7 +70,7 @@ export function EditorPane() {
       }
       setEditorMode(mode);
     },
-    [editorMode, serializedMarkdown, localMarkdown, isEditing, setEditorMode]
+    [editorMode, serializedMarkdown, localMarkdown, isEditing, setEditorMode, reserialize]
   );
 
   // Sync edited markdown back to structured state
@@ -43,6 +79,27 @@ export function EditorPane() {
       if (!doc) return;
       try {
         const parsed = parseNotedownFile(md, doc.filename);
+
+        // Extract free text outside block fences and wrap into new blocks
+        const freeText = extractFreeTextOutsideBlocks(md, parsed.blocks.length);
+        if (freeText.trim()) {
+          const now = new Date().toISOString();
+          const maxBlockNum = parsed.blocks.reduce((max, b) => {
+            const num = parseInt(b.id.replace("b_", ""), 10);
+            return num > max ? num : max;
+          }, 0);
+          const newBlock = {
+            id: `b_${String(maxBlockNum + 1).padStart(3, "0")}`,
+            type: "text" as const,
+            content: freeText.trim(),
+            createdAt: now,
+            tags: [],
+            assetIds: [],
+            source: "edit" as const,
+          };
+          parsed.blocks.push(newBlock);
+        }
+
         // Preserve the document ID and merge
         setDocument({
           ...parsed,
@@ -55,12 +112,10 @@ export function EditorPane() {
     [doc, setDocument]
   );
 
-  // Compute display markdown — strip nd:data section for preview
+  // Compute display markdown — preserve block markers for scroll anchors,
+  // strip nd:data section for cleaner preview
   const previewMarkdown = useMemo(() => {
-    // Remove the nd:data section for cleaner preview
     return serializedMarkdown
-      .replace(/<!-- nd:block \S+ \S+ \S+ -->\n/g, "")
-      .replace(/<!-- nd:endblock \S+ -->\n?/g, "")
       .replace(/<!-- nd:data -->[\s\S]*?<!-- nd:enddata -->/g, "");
   }, [serializedMarkdown]);
 

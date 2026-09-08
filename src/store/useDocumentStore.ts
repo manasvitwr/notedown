@@ -25,6 +25,10 @@ interface DocumentStore {
   recentDocs: RecentDoc[];
   serializedMarkdown: string;
 
+  // ─── Monotonic ID counters (never reused after deletion) ─
+  nextBlockNum: number;
+  nextAssetNum: number;
+
   // ─── Document Actions ───────────────────────────────────
   newDocument: (title: string) => void;
   setDocument: (doc: DocumentState) => void;
@@ -36,6 +40,10 @@ interface DocumentStore {
 
   // ─── Asset Actions ──────────────────────────────────────
   addAsset: (asset: Asset) => void;
+
+  // ─── ID Allocation (atomic, monotonic) ──────────────────
+  allocateBlockId: () => string;
+  allocateAssetId: () => string;
 
   // ─── Editor ─────────────────────────────────────────────
   setEditorMode: (mode: EditorMode) => void;
@@ -61,18 +69,35 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   lastSavedAt: null,
   recentDocs: [],
   serializedMarkdown: "",
+  nextBlockNum: 1,
+  nextAssetNum: 1,
 
   // ─── Document Actions ───────────────────────────────────
 
   newDocument: (title: string) => {
     const doc = createEmptyDocument(nanoid(), title);
     const md = serializeDocument(doc);
-    set({ doc, serializedMarkdown: md, saveStatus: "unsaved" });
+    set({ doc, serializedMarkdown: md, saveStatus: "unsaved", nextBlockNum: 1, nextAssetNum: 1 });
   },
 
   setDocument: (doc: DocumentState) => {
     const md = serializeDocument(doc);
-    set({ doc, serializedMarkdown: md, saveStatus: "unsaved" });
+    // Initialize counters to be beyond any existing IDs
+    const maxBlockNum = doc.blocks.reduce((max, b) => {
+      const num = parseInt(b.id.replace(BLOCK_PREFIX, ""), 10);
+      return num > max ? num : max;
+    }, 0);
+    const maxAssetNum = Object.keys(doc.assets).reduce((max, id) => {
+      const num = parseInt(id.replace(ASSET_PREFIX, ""), 10);
+      return num > max ? num : max;
+    }, 0);
+    set({
+      doc,
+      serializedMarkdown: md,
+      saveStatus: "unsaved",
+      nextBlockNum: maxBlockNum + 1,
+      nextAssetNum: maxAssetNum + 1,
+    });
   },
 
   // ─── Block Actions ──────────────────────────────────────
@@ -129,6 +154,22 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       updatedAt: new Date().toISOString(),
     };
     set({ doc: updated, saveStatus: "unsaved" });
+  },
+
+  // ─── ID Allocation (atomic, monotonic) ──────────────────
+
+  allocateBlockId: () => {
+    const { nextBlockNum } = get();
+    const id = `${BLOCK_PREFIX}${String(nextBlockNum).padStart(3, "0")}`;
+    set({ nextBlockNum: nextBlockNum + 1 });
+    return id;
+  },
+
+  allocateAssetId: () => {
+    const { nextAssetNum } = get();
+    const id = `${ASSET_PREFIX}${String(nextAssetNum).padStart(3, "0")}`;
+    set({ nextAssetNum: nextAssetNum + 1 });
+    return id;
   },
 
   // ─── Editor ─────────────────────────────────────────────

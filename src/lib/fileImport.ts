@@ -1,5 +1,5 @@
 import type { DocumentState } from "../types";
-import { parseNotedownFile } from "./markdownParser";
+import { parseNotedownFile, createPlainImport } from "./markdownParser";
 
 export interface ImportResult {
   doc: DocumentState;
@@ -25,9 +25,9 @@ export async function importFile(file: File): Promise<ImportResult> {
     isNotedownFormat = text.includes("notedown:");
   } catch (err) {
     warnings.push(
-      `Parse error: ${err instanceof Error ? err.message : "Unknown error"}. Imported as plain text.`
+      `Parse warning: ${err instanceof Error ? err.message : "Unknown error"}. Imported as plain text.`
     );
-    doc = parseNotedownFile(text, file.name);
+    doc = createPlainImport(text, file.name);
   }
 
   if (!isNotedownFormat) {

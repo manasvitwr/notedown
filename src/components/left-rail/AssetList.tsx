@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { formatBytes } from "../../lib/size";
 
@@ -5,6 +6,18 @@ export function AssetList() {
   const doc = useDocumentStore((s) => s.doc);
   const assets = doc?.assets ?? {};
   const entries = Object.values(assets);
+
+  // Find which block references each asset
+  const assetToBlockId = useMemo(() => {
+    if (!doc) return {};
+    const map: Record<string, string> = {};
+    for (const block of doc.blocks) {
+      for (const assetId of block.assetIds) {
+        if (!map[assetId]) map[assetId] = block.id;
+      }
+    }
+    return map;
+  }, [doc]);
 
   return (
     <div className="px-4 py-3">
@@ -19,9 +32,16 @@ export function AssetList() {
       ) : (
         <div className="space-y-1 max-h-[200px] overflow-y-auto">
           {entries.map((asset) => (
-            <div
+            <button
               key={asset.id}
-              className="flex items-center gap-2 px-2 py-1 rounded-[var(--radius-xs)] hover:bg-bg-hover transition-colors"
+              onClick={() => {
+                const blockId = assetToBlockId[asset.id];
+                if (blockId) {
+                  const el = document.getElementById(`block-${blockId}`);
+                  el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+              }}
+              className="w-full flex items-center gap-2 px-2 py-1 rounded-[var(--radius-xs)] hover:bg-bg-hover transition-colors text-left"
             >
               <img
                 src={`data:${asset.mime};base64,${asset.base64}`}
@@ -37,7 +57,7 @@ export function AssetList() {
                   {asset.width > 0 && ` · ${asset.width}×${asset.height}`}
                 </div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}

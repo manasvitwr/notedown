@@ -55,12 +55,10 @@ export function EditorPane() {
     [doc, setDocument]
   );
 
-  // Compute display markdown — strip nd:data section for preview
+  // Compute display markdown — preserve block markers for scroll anchors,
+  // strip nd:data section for cleaner preview
   const previewMarkdown = useMemo(() => {
-    // Remove the nd:data section for cleaner preview
     return serializedMarkdown
-      .replace(/<!-- nd:block \S+ \S+ \S+ -->\n/g, "")
-      .replace(/<!-- nd:endblock \S+ -->\n?/g, "")
       .replace(/<!-- nd:data -->[\s\S]*?<!-- nd:enddata -->/g, "");
   }, [serializedMarkdown]);
 

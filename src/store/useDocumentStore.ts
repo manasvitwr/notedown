@@ -37,6 +37,8 @@ interface DocumentStore {
   appendBlock: (block: Block) => void;
   appendBlocks: (blocks: Block[], assets: Asset[]) => void;
   deleteBlock: (blockId: string) => void;
+  moveBlock: (blockId: string, direction: "up" | "down") => void;
+  toggleBlockCollapse: (blockId: string) => void;
 
   // ─── Asset Actions ──────────────────────────────────────
   addAsset: (asset: Asset) => void;
@@ -151,6 +153,38 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       ...doc,
       blocks: remainingBlocks,
       assets: cleanedAssets,
+      updatedAt: new Date().toISOString(),
+    };
+    // Defer serialization — recomputed lazily when needed
+    set({ doc: updated, saveStatus: "unsaved" });
+  },
+
+  moveBlock: (blockId: string, direction: "up" | "down") => {
+    const { doc } = get();
+    if (!doc) return;
+    const idx = doc.blocks.findIndex((b) => b.id === blockId);
+    if (idx === -1) return;
+    const targetIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= doc.blocks.length) return;
+    const newBlocks = [...doc.blocks];
+    [newBlocks[idx], newBlocks[targetIdx]] = [newBlocks[targetIdx], newBlocks[idx]];
+    const updated: DocumentState = {
+      ...doc,
+      blocks: newBlocks,
+      updatedAt: new Date().toISOString(),
+    };
+    // Defer serialization — recomputed lazily when needed
+    set({ doc: updated, saveStatus: "unsaved" });
+  },
+
+  toggleBlockCollapse: (blockId: string) => {
+    const { doc } = get();
+    if (!doc) return;
+    const updated: DocumentState = {
+      ...doc,
+      blocks: doc.blocks.map((b) =>
+        b.id === blockId ? { ...b, collapsed: !b.collapsed } : b
+      ),
       updatedAt: new Date().toISOString(),
     };
     // Defer serialization — recomputed lazily when needed

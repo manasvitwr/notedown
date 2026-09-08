@@ -25,11 +25,16 @@ export function parseNotedownFile(
 
   // 3. Extract blocks
   const blockRegex =
-    /<!-- nd:block (\S+) (\S+) (\S+) -->\n([\s\S]*?)<!-- nd:endblock \1 -->/g;
+    /<!-- nd:block (\S+) (\S+) (\S+)(?: collapsed)? -->\n([\s\S]*?)<!-- nd:endblock \1 -->/g;
   const blocks: Block[] = [];
   let match;
   while ((match = blockRegex.exec(contentAfterFrontmatter)) !== null) {
     const [, id, type, createdAt, rawContent] = match;
+    // Check the original text for the collapsed marker
+    const blockStart = match.index;
+    const blockMarkerEnd = contentAfterFrontmatter.indexOf("-->", blockStart);
+    const blockMarker = contentAfterFrontmatter.slice(blockStart, blockMarkerEnd + 3);
+    const isCollapsed = blockMarker.includes("collapsed");
     const content = stripBlockHeading(rawContent.trim());
     blocks.push({
       id,
@@ -39,6 +44,7 @@ export function parseNotedownFile(
       tags: [],
       assetIds: extractAssetRefs(content),
       source: "import",
+      collapsed: isCollapsed || undefined,
     });
   }
 

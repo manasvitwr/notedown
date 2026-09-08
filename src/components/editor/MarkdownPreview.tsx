@@ -77,10 +77,18 @@ export function MarkdownPreview({ markdown }: MarkdownPreviewProps) {
     return result;
   }, [markdown, doc]);
 
-  const html = useMemo(
-    () => md.render(processedMarkdown),
-    [processedMarkdown]
-  );
+  const html = useMemo(() => {
+    const rendered = md.render(processedMarkdown);
+    // Post-process: convert <!-- nd:block {id} ... --> / <!-- nd:endblock {id} -->
+    // into <div id="block-{id}" class="nd-block-anchor">...</div> wrappers
+    // so outline/capture-stack clicks can scroll to them.
+    return rendered
+      .replace(
+        /<!-- nd:block (\S+) \S+ \S+ -->([\s\S]*?)<!-- nd:endblock \1 -->/g,
+        '<div id="block-$1" class="nd-block-anchor">$2</div>'
+      )
+      .replace(/<!-- nd:\w+ -->/g, "");
+  }, [processedMarkdown]);
 
   return (
     <div

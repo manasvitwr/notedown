@@ -278,7 +278,13 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   // ─── Editor ─────────────────────────────────────────────
 
-  setEditorMode: (mode: EditorMode) => set({ editorMode: mode }),
+  setEditorMode: (mode: EditorMode) => {
+    // Entering markdown always reads the freshest serialization. Appends defer
+    // serialization, so a tab switch (incl. scrollToBlock's) must resync; the
+    // pending draft itself is flushed by the textarea blur before the switch.
+    if (mode === "markdown") get().reserialize();
+    set({ editorMode: mode });
+  },
 
   // ─── Serialization ──────────────────────────────────────
 

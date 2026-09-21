@@ -1,6 +1,7 @@
 import type { Block } from "../../types";
 import { formatBlockTime } from "../../lib/dates";
 import { useDocumentStore } from "../../store/useDocumentStore";
+import { scrollToBlock } from "../../lib/scrollToBlock";
 import { FileText, Link, Code, Mic, Image, Layers, ChevronUp, ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
 import type { BlockType } from "../../types";
 
@@ -42,9 +43,12 @@ const typeConfig: Record<
 
 interface CaptureCardProps {
   block: Block;
+  displayIndex: number;
+  isDragging: boolean;
+  isDimmed: boolean;
 }
 
-export function CaptureCard({ block }: CaptureCardProps) {
+export function CaptureCard({ block, displayIndex, isDragging, isDimmed }: CaptureCardProps) {
   const doc = useDocumentStore((s) => s.doc);
   const moveBlock = useDocumentStore((s) => s.moveBlock);
   const toggleBlockCollapse = useDocumentStore((s) => s.toggleBlockCollapse);
@@ -53,6 +57,9 @@ export function CaptureCard({ block }: CaptureCardProps) {
   const blockIndex = doc?.blocks.findIndex((b) => b.id === block.id) ?? -1;
   const isFirst = blockIndex === 0;
   const isLast = blockIndex === (doc?.blocks.length ?? 0) - 1;
+
+  // Imported blocks are branded as IMPORTED (vs PASTED/clipboard captures)
+  const badgeLabel = block.source === "import" ? "IMPORTED" : config.label;
 
   // Get preview text (first 120 chars, strip markdown)
   const preview = block.content
@@ -71,13 +78,26 @@ export function CaptureCard({ block }: CaptureCardProps) {
 
   return (
     <button
-      onClick={() => {
-        const el = document.getElementById(`block-${block.id}`);
-        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      data-card-index={displayIndex}
+      data-block-id={block.id}
+      onClick={(e) => {
+        // Suppress the click that follows a completed drag reorder
+        if (e.currentTarget.dataset.justDragged) {
+          delete e.currentTarget.dataset.justDragged;
+          return;
+        }
+        scrollToBlock(block.id, block.type);
       }}
-      className="w-full text-left animate-fade-in-up"
+      draggable={false}
+      className={`w-full text-left animate-fade-in-up transition-opacity duration-150 ${
+        isDragging ? "relative z-20 cursor-grabbing" : ""
+      } ${isDimmed && !isDragging ? "opacity-40" : ""}`}
     >
-      <div className="bg-bg-panel border border-border rounded-[var(--radius-sm)] p-3 hover:border-border-hover hover:bg-bg-hover transition-all duration-150 space-y-2">
+      <div
+        className={`bg-bg-panel border border-border rounded-[var(--radius-sm)] p-3 hover:border-border-hover hover:bg-bg-hover transition-all duration-150 space-y-2 ${
+          isDragging ? "reorder-drag-active" : ""
+        }`}
+      >
         {/* Image thumbnail */}
         {imageAsset && (
           <div className="rounded-[var(--radius-xs)] overflow-hidden border border-border">
@@ -85,6 +105,7 @@ export function CaptureCard({ block }: CaptureCardProps) {
               src={`data:${imageAsset.mime};base64,${imageAsset.base64}`}
               alt={imageAsset.alt ?? "screenshot"}
               className="w-full h-20 object-cover"
+              draggable={false}
             />
           </div>
         )}
@@ -102,7 +123,7 @@ export function CaptureCard({ block }: CaptureCardProps) {
             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${config.color}`}
           >
             {config.icon}
-            {config.label}
+            {badgeLabel}
           </span>
           <div className="flex items-center gap-1">
             <button

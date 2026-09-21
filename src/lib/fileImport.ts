@@ -50,7 +50,7 @@ export function openFilePicker(): Promise<File | null> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".md,.nd.md,text/markdown";
+    input.accept = ".md,.markdown,.txt,text/markdown,text/plain";
     input.onchange = () => {
       resolve(input.files?.[0] ?? null);
     };

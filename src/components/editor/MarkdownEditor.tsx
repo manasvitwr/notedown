@@ -17,6 +17,7 @@ export function MarkdownEditor({
 }: MarkdownEditorProps) {
   return (
     <textarea
+      id="markdown-editor"
       ref={editorRef}
       value={value}
       onChange={(e) => onChange(e.target.value)}

@@ -263,3 +263,14 @@ body {
   font-style: italic;
   font-size: 0.85em;
 }
+
+/* ─── Capture Stack Drag / Reorder ─────────────────────────── */
+.reordering {
+  user-select: none;
+}
+
+.reorder-drag-active {
+  scale: 1.02;
+  border-color: var(--color-border-hover);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+}

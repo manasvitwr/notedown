@@ -58,16 +58,18 @@ export function CaptureStack() {
     const cards = Array.from(
       list.querySelectorAll("[data-card-index]")
     ) as HTMLElement[];
-    if (cards.length === 0) return 0;
-    let target = 0;
-    for (let i = 0; i < cards.length - 1; i++) {
+    const count = cards.length;
+    if (count === 0) return 0;
+    for (let i = 0; i < count - 1; i++) {
       const cur = cards[i].getBoundingClientRect();
       const next = cards[i + 1].getBoundingClientRect();
       const boundary = (cur.bottom + next.top) / 2;
       if (clientY <= boundary) return i;
-      target = i + 1;
     }
-    return target;
+    // Past the midpoint of the last card the drop target is the trailing gap (n).
+    const last = cards[count - 1].getBoundingClientRect();
+    const lastMid = last.top + last.height / 2;
+    return clientY < lastMid ? count - 1 : count;
   }, []);
 
   const positionIndicator = useCallback(() => {
@@ -142,7 +144,9 @@ export function CaptureStack() {
         rec.cardEl.dataset.justDragged = "1";
         const final = reversed.slice();
         const [moved] = final.splice(from, 1);
-        final.splice(over, 0, moved);
+        // `over` is the insertion slot in the pre-removal list; once the
+        // dragged card is removed the later slots shift left by one.
+        final.splice(over > from ? over - 1 : over, 0, moved);
         // The store keeps blocks oldest-first; the stack renders the reverse
         // (newest-first), so the display order has to be reversed back before
         // committing, otherwise the list snaps to the wrong order.

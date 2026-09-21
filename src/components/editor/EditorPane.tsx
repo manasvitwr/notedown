@@ -6,8 +6,7 @@ import { MarkdownPreview } from "./MarkdownPreview";
 import { DataView } from "./DataView";
 import { StatusBar } from "./StatusBar";
 import { useDocumentStore } from "../../store/useDocumentStore";
-import { parseNotedownFile } from "../../lib/markdownParser";
-import { BLOCK_PREFIX } from "../../constants/defaults";
+import { parseNotedownFile, createBlockSectionRegex } from "../../lib/markdownParser";
 import type { Block, EditorMode } from "../../types";
 
 /**
@@ -18,12 +17,10 @@ import type { Block, EditorMode } from "../../types";
 function extractFreeTextOutsideBlocks(md: string): string {
   // Remove frontmatter
   const noFrontmatter = md.replace(/^---\n[\s\S]*?\n---\n*/, "");
-  // Remove all nd:block...nd:endblock sections. Capture the block id so each
-  // section is terminated by its own closing fence (`\1`), and accept the
-  // optional ` collapsed` marker emitted for collapsed blocks.
-  const blockSectionRegex =
-    /<!-- nd:block (\S+) \S+ \S+(?: collapsed)? -->[\s\S]*?<!-- nd:endblock \1 -->/g;
-  const noBlocks = noFrontmatter.replace(blockSectionRegex, "");
+  // Remove all block sections using the same fence pattern as the parser, so a
+  // section is only stripped when the parser would also recognize it as a block
+  // (a malformed inline fence is left as free text rather than silently dropped).
+  const noBlocks = noFrontmatter.replace(createBlockSectionRegex(), "");
   // Remove nd:data section
   const noData = noBlocks.replace(
     /<!-- nd:data -->[\s\S]*?<!-- nd:enddata -->/g,
@@ -48,6 +45,7 @@ export function EditorPane() {
   const serializedMarkdown = useDocumentStore((s) => s.serializedMarkdown);
   const setDocument = useDocumentStore((s) => s.setDocument);
   const reserialize = useDocumentStore((s) => s.reserialize);
+  const allocateBlockId = useDocumentStore((s) => s.allocateBlockId);
 
   // Local editor state — only used in markdown mode
   const [localMarkdown, setLocalMarkdown] = useState("");
@@ -84,19 +82,16 @@ export function EditorPane() {
 
         // Extract free text outside block fences and wrap into a new block.
         // This only fires when the user actually typed content outside a fence,
-        // so switching modes with no edits is a no-op.
+        // so switching modes with no edits is a no-op. The id comes from the
+        // store's monotonic allocator, never a local max+1 mint, so deleted
+        // ids are not reused.
         const freeText = extractFreeTextOutsideBlocks(md);
         if (freeText.trim()) {
-          const now = new Date().toISOString();
-          const maxBlockNum = parsed.blocks.reduce((max, b) => {
-            const num = parseInt(b.id.replace(BLOCK_PREFIX, ""), 10);
-            return num > max ? num : max;
-          }, 0);
           const newBlock: Block = {
-            id: `${BLOCK_PREFIX}${String(maxBlockNum + 1).padStart(3, "0")}`,
+            id: allocateBlockId(),
             type: "text",
             content: freeText.trim(),
-            createdAt: now,
+            createdAt: new Date().toISOString(),
             tags: [],
             assetIds: [],
             source: "edit",
@@ -114,7 +109,7 @@ export function EditorPane() {
         console.error("Failed to parse edited markdown:", err);
       }
     },
-    [doc, setDocument]
+    [doc, setDocument, allocateBlockId]
   );
 
   // When switching TO markdown mode, populate local state

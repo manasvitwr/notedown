@@ -3,6 +3,26 @@ import { DEFAULT_SETTINGS } from "../constants/defaults";
 import { nanoid } from "nanoid";
 
 /**
+ * Source for the block-section regex, shared with the editor so parsing and
+ * free-text extraction always agree on what counts as a real block section.
+ *
+ * The opening fence requires a trailing newline (the format `serializeDocument`
+ * emits). A malformed/inline fence therefore is NOT treated as a block here,
+ * which keeps the editor from silently deleting it during a markdown<->preview
+ * mode switch.
+ */
+const BLOCK_SECTION_SOURCE =
+  "<!-- nd:block (\\S+) (\\S+) (\\S+)(?: collapsed)? -->\\n([\\s\\S]*?)<!-- nd:endblock \\1 -->";
+
+/**
+ * Create a fresh global block-section regex. Each caller gets its own regex
+ * instance so shared `lastIndex` state can never leak between callers.
+ */
+export function createBlockSectionRegex(): RegExp {
+  return new RegExp(BLOCK_SECTION_SOURCE, "g");
+}
+
+/**
  * Parse a .nd.md or plain .md file into a DocumentState.
  */
 export function parseNotedownFile(
@@ -24,8 +44,7 @@ export function parseNotedownFile(
   );
 
   // 3. Extract blocks
-  const blockRegex =
-    /<!-- nd:block (\S+) (\S+) (\S+)(?: collapsed)? -->\n([\s\S]*?)<!-- nd:endblock \1 -->/g;
+  const blockRegex = createBlockSectionRegex();
   const blocks: Block[] = [];
   let match;
   while ((match = blockRegex.exec(contentAfterFrontmatter)) !== null) {

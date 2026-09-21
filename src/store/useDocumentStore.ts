@@ -93,12 +93,15 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       const num = parseInt(id.replace(ASSET_PREFIX, ""), 10);
       return num > max ? num : max;
     }, 0);
+    const { nextBlockNum, nextAssetNum } = get();
     set({
       doc,
       serializedMarkdown: md,
       saveStatus: "unsaved",
-      nextBlockNum: maxBlockNum + 1,
-      nextAssetNum: maxAssetNum + 1,
+      // Keep the monotonic counters ahead of any existing ID without ever
+      // moving them backwards, so ids freed by a deleted block are never reused.
+      nextBlockNum: Math.max(nextBlockNum, maxBlockNum + 1),
+      nextAssetNum: Math.max(nextAssetNum, maxAssetNum + 1),
     });
   },
 

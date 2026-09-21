@@ -64,6 +64,30 @@ interface DocumentStore {
   getOutline: () => Array<{ id: string; label: string; type: string }>;
 }
 
+/**
+ * Return the monotonic ID counters advanced past any ID present in `doc`,
+ * without ever moving them backwards from their current value. IDs handed out
+ * by allocateBlockId/allocateAssetId are therefore always unique and never
+ * reissued after a block/asset is deleted.
+ */
+function advanceIdCounters(
+  doc: DocumentState,
+  current: { nextBlockNum: number; nextAssetNum: number }
+): { nextBlockNum: number; nextAssetNum: number } {
+  const maxBlockNum = doc.blocks.reduce((max, b) => {
+    const num = parseInt(b.id.replace(BLOCK_PREFIX, ""), 10);
+    return num > max ? num : max;
+  }, 0);
+  const maxAssetNum = Object.keys(doc.assets).reduce((max, id) => {
+    const num = parseInt(id.replace(ASSET_PREFIX, ""), 10);
+    return num > max ? num : max;
+  }, 0);
+  return {
+    nextBlockNum: Math.max(current.nextBlockNum, maxBlockNum + 1),
+    nextAssetNum: Math.max(current.nextAssetNum, maxAssetNum + 1),
+  };
+}
+
 export const useDocumentStore = create<DocumentStore>((set, get) => ({
   doc: null,
   editorMode: "preview",
@@ -84,24 +108,11 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
 
   setDocument: (doc: DocumentState) => {
     const md = serializeDocument(doc);
-    // Initialize counters to be beyond any existing IDs
-    const maxBlockNum = doc.blocks.reduce((max, b) => {
-      const num = parseInt(b.id.replace(BLOCK_PREFIX, ""), 10);
-      return num > max ? num : max;
-    }, 0);
-    const maxAssetNum = Object.keys(doc.assets).reduce((max, id) => {
-      const num = parseInt(id.replace(ASSET_PREFIX, ""), 10);
-      return num > max ? num : max;
-    }, 0);
-    const { nextBlockNum, nextAssetNum } = get();
     set({
       doc,
       serializedMarkdown: md,
       saveStatus: "unsaved",
-      // Keep the monotonic counters ahead of any existing ID without ever
-      // moving them backwards, so ids freed by a deleted block are never reused.
-      nextBlockNum: Math.max(nextBlockNum, maxBlockNum + 1),
-      nextAssetNum: Math.max(nextAssetNum, maxAssetNum + 1),
+      ...advanceIdCounters(doc, get()),
     });
   },
 
@@ -261,6 +272,7 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
           serializedMarkdown: md,
           saveStatus: "saved",
           lastSavedAt: doc.updatedAt,
+          ...advanceIdCounters(doc, get()),
         });
       }
     } catch (err) {

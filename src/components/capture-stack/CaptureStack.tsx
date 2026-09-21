@@ -143,7 +143,10 @@ export function CaptureStack() {
         const final = reversed.slice();
         const [moved] = final.splice(from, 1);
         final.splice(over, 0, moved);
-        reorderBlocks(final.map((b) => b.id));
+        // The store keeps blocks oldest-first; the stack renders the reverse
+        // (newest-first), so the display order has to be reversed back before
+        // committing, otherwise the list snaps to the wrong order.
+        reorderBlocks(final.slice().reverse().map((b) => b.id));
       }
     };
 

@@ -18,38 +18,70 @@ export function isMarkdownDisplayable(type: BlockType): boolean {
  * - Markdown mode: displayable blocks scroll the textarea to that block's
  *   section; images (or anything else that can't render as raw text) switch to
  *   the preview tab and scroll to the image there.
+ * - Data mode: same destinations as markdown mode, but the editor has to
+ *   switch tabs first, so the scroll waits for the destination to mount.
  */
 export function scrollToBlock(blockId: string, blockType: BlockType): void {
   const { editorMode, setEditorMode } = useDocumentStore.getState();
 
   if (editorMode === "preview") {
-    scrollPreviewAnchor(blockId);
+    scrollPreviewAnchorWhenReady(blockId);
     return;
   }
 
-  if (!isMarkdownDisplayable(blockType)) {
-    setEditorMode("preview");
-    requestAnimationFrame(() => scrollPreviewAnchor(blockId));
+  if (editorMode === "markdown" && isMarkdownDisplayable(blockType)) {
+    scrollMarkdownTextareaToBlockWhenReady(blockId);
     return;
   }
 
-  if (editorMode === "markdown") {
-    scrollMarkdownTextareaToBlock(blockId);
+  // Markdown/dimagable blocks in data mode and non-displayable blocks anywhere
+  // else need a tab switch first, then a scroll once the destination mounts.
+  const destination = isMarkdownDisplayable(blockType) ? "markdown" : "preview";
+  setEditorMode(destination);
+  if (destination === "markdown") {
+    scrollMarkdownTextareaToBlockWhenReady(blockId);
+  } else {
+    scrollPreviewAnchorWhenReady(blockId);
   }
 }
 
-function scrollPreviewAnchor(blockId: string): void {
-  document
-    .getElementById(`block-${blockId}`)
-    ?.scrollIntoView({ behavior: "smooth", block: "center" });
+/**
+ * Smoothly scroll to an element once it exists, bounding the retry window.
+ * A tab switch only commits the target anchor to the DOM after React has
+ * re-rendered, so a single frame is not enough — keep retrying until it mounts.
+ */
+function whenReady<T extends HTMLElement>(
+  find: () => T | null,
+  scroll: (el: T) => void,
+  attemptsLeft = 12
+): void {
+  const el = find();
+  if (el) {
+    scroll(el);
+    return;
+  }
+  if (attemptsLeft <= 0) return;
+  requestAnimationFrame(() => whenReady(find, scroll, attemptsLeft - 1));
 }
 
-function scrollMarkdownTextareaToBlock(blockId: string): void {
-  const textarea = document.getElementById(
-    "markdown-editor"
-  ) as HTMLTextAreaElement | null;
-  if (!textarea) return;
+function scrollPreviewAnchorWhenReady(blockId: string): void {
+  whenReady(
+    () => document.getElementById(`block-${blockId}`),
+    (el) => el.scrollIntoView({ behavior: "smooth", block: "center" })
+  );
+}
 
+function scrollMarkdownTextareaToBlockWhenReady(blockId: string): void {
+  whenReady(
+    () => document.getElementById("markdown-editor") as HTMLTextAreaElement | null,
+    (textarea) => scrollMarkdownTextareaToBlock(textarea, blockId)
+  );
+}
+
+function scrollMarkdownTextareaToBlock(
+  textarea: HTMLTextAreaElement,
+  blockId: string
+): void {
   const marker = `<!-- nd:block ${blockId} `;
   const start = textarea.value.indexOf(marker);
   if (start === -1) return;

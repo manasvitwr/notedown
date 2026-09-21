@@ -339,7 +339,7 @@ export function CaptureStack() {
         onPointerMove={handleListPointerMove}
         onPointerUp={handleListPointerUp}
         onPointerCancel={handleListPointerUp}
-        className="relative flex-1 overflow-y-auto p-2 space-y-2 select-none"
+        className="relative flex-1 overflow-y-auto p-2 space-y-2"
       >
         {/* Drop indicator */}
         <div

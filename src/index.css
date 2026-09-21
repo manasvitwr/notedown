@@ -265,7 +265,9 @@ body {
 }
 
 /* ─── Capture Stack Drag / Reorder ─────────────────────────── */
-.reordering {
+.reordering,
+.reordering * {
+  -webkit-user-select: none;
   user-select: none;
 }
 

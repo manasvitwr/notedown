@@ -80,17 +80,20 @@ export function MarkdownPreview({ markdown }: MarkdownPreviewProps) {
   const html = useMemo(() => {
     const rendered = md.render(processedMarkdown);
     // Post-process: convert block markers into scrollable anchor divs.
+    // With html:false markdown-it escapes the markers (e.g.
+    // "&lt;!-- nd:block ... --&gt;"), so a marker alone on its line becomes its
+    // own <p>. Match that shape to wrap each block's content in an anchor div.
     // Collapsed blocks get a CSS class that hides their content.
     return rendered
       .replace(
-        /<!-- nd:block (\S+) \S+ \S+ collapsed -->([\s\S]*?)<!-- nd:endblock \1 -->/g,
+        /<p>&lt;!-- nd:block (\S+) \S+ \S+ collapsed --&gt;<\/p>\s*([\s\S]*?)\s*<p>&lt;!-- nd:endblock \1 --&gt;<\/p>/g,
         '<div id="block-$1" class="nd-block-anchor nd-block-collapsed">$2</div>'
       )
       .replace(
-        /<!-- nd:block (\S+) \S+ \S+ -->([\s\S]*?)<!-- nd:endblock \1 -->/g,
+        /<p>&lt;!-- nd:block (\S+) \S+ \S+ --&gt;<\/p>\s*([\s\S]*?)\s*<p>&lt;!-- nd:endblock \1 --&gt;<\/p>/g,
         '<div id="block-$1" class="nd-block-anchor">$2</div>'
       )
-      .replace(/<!-- nd:\w+ -->/g, "");
+      .replace(/<p>&lt;!-- nd:\w+ --&gt;<\/p>\s*/g, "");
   }, [processedMarkdown]);
 
   return (

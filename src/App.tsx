@@ -43,13 +43,19 @@ export default function App() {
   useAutosave();
 
   const handleNew = useCallback(() => {
-    if (doc && doc.blocks.length > 0 && saveStatus === "unsaved") {
-      if (!confirm("You have unsaved changes. Create a new note anyway?")) {
+    // Always let the user discard the current note (it is replaced from
+    // scratch), regardless of whether it was already saved to storage.
+    if (doc && (doc.blocks.length > 0 || Object.keys(doc.assets).length > 0)) {
+      if (
+        !confirm(
+          "This will discard the current note and start from scratch. Continue?"
+        )
+      ) {
         return;
       }
     }
     setShowNewModal(true);
-  }, [doc, saveStatus]);
+  }, [doc]);
 
   const handleImport = useCallback(() => {
     setShowImportModal(true);

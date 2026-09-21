@@ -4,24 +4,30 @@ import { processPaste } from "../lib/clipboard";
 
 /**
  * Global paste event listener.
- * Intercepts Ctrl+V, processes clipboard, appends blocks to store.
+ * Intercepts Ctrl+V outside editable fields, processes clipboard and appends
+ * blocks to the store. In markdown mode this keeps preview and the raw view in
+ * sync because the appended blocks are immediately re-serialized.
  */
 export function usePasteHandler() {
   const doc = useDocumentStore((s) => s.doc);
   const appendBlocks = useDocumentStore((s) => s.appendBlocks);
-  const editorMode = useDocumentStore((s) => s.editorMode);
   const allocateBlockId = useDocumentStore((s) => s.allocateBlockId);
   const allocateAssetId = useDocumentStore((s) => s.allocateAssetId);
+  const editorMode = useDocumentStore((s) => s.editorMode);
+  const reserialize = useDocumentStore((s) => s.reserialize);
 
   useEffect(() => {
     const handler = async (event: ClipboardEvent) => {
       if (!doc) return;
 
-      // If user is editing in the markdown textarea, let native paste work
+      // Pasting into an editable field (markdown textarea, modal inputs) is
+      // handled by the field itself — the markdown textarea turns the paste
+      // into a proper pasted block. Don't intercept those here.
       const target = event.target as HTMLElement;
       if (
-        editorMode === "markdown" &&
-        (target.tagName === "TEXTAREA" || target.tagName === "INPUT")
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "INPUT" ||
+        target.isContentEditable
       ) {
         return;
       }
@@ -35,6 +41,11 @@ export function usePasteHandler() {
         });
         if (blocks.length > 0) {
           appendBlocks(blocks, assets);
+          // In markdown mode the raw view is a mirror of the serialization, so
+          // refresh it right away to show the just-pasted card.
+          if (editorMode === "markdown") {
+            reserialize();
+          }
         }
       } catch (err) {
         console.error("Paste processing failed:", err);
@@ -43,5 +54,5 @@ export function usePasteHandler() {
 
     document.addEventListener("paste", handler);
     return () => document.removeEventListener("paste", handler);
-  }, [doc, appendBlocks, editorMode, allocateBlockId, allocateAssetId]);
+  }, [doc, appendBlocks, allocateBlockId, allocateAssetId, editorMode, reserialize]);
 }

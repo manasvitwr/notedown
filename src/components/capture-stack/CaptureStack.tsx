@@ -4,6 +4,7 @@ import { CaptureCard } from "./CaptureCard";
 import { Panel } from "../shared/Panel";
 import { importFile, openFilePicker } from "../../lib/fileImport";
 import { Clipboard, Upload } from "lucide-react";
+import { ASSET_PREFIX } from "../../constants/defaults";
 import type { Block, Asset } from "../../types";
 
 // Hold duration before a card becomes draggable.
@@ -27,6 +28,31 @@ interface HoldState {
 interface DragState {
   fromIndex: number;
   overIndex: number;
+}
+
+/**
+ * Extract referenced asset ids from block content using the same token shape
+ * as the parser, so block.assetIds always matches the refs in the content.
+ */
+function extractReferencedAssetIds(content: string): string[] {
+  const refs: string[] = [];
+  const re = new RegExp(`\\[(${ASSET_PREFIX}\\d+)\\]`, "g");
+  let m;
+  while ((m = re.exec(content)) !== null) refs.push(m[1]);
+  return refs;
+}
+
+/**
+ * Rewrite references to imported asset ids. Matches a generic bracketed token
+ * and only replaces tokens present in the parsed asset-id set (idMap), so any
+ * id naming scheme is covered and unrelated brackets are left untouched.
+ */
+function remapAssetRefs(content: string, idMap: Map<string, string>): string {
+  if (idMap.size === 0) return content;
+  return content.replace(/\[([^\]]+)\]/g, (match, token) => {
+    const mapped = idMap.get(token);
+    return mapped ? `[${mapped}]` : match;
+  });
 }
 
 export function CaptureStack() {
@@ -240,32 +266,44 @@ export function CaptureStack() {
       if (result.doc.blocks.length === 0) return;
 
       // Re-map ids so imported blocks/assets never collide with existing ones.
-      const assetIds = allocateAssetIds(Object.keys(result.doc.assets).length);
-      const blockIds = allocateBlockIds(result.doc.blocks.length);
+      const declaredIds = Object.keys(result.doc.assets);
+      const declaredAssetIds = allocateAssetIds(declaredIds.length);
       const idMap = new Map<string, string>();
-      Object.keys(result.doc.assets).forEach((oldId, i) => {
-        idMap.set(oldId, assetIds[i]);
-      });
+      declaredIds.forEach((oldId, i) => idMap.set(oldId, declaredAssetIds[i]));
 
-      const newAssets: Asset[] = [];
-      for (const [oldId, asset] of Object.entries(result.doc.assets)) {
-        const newId = idMap.get(oldId)!;
-        newAssets.push({
-          ...asset,
-          id: newId,
-          alt: asset.alt === oldId ? newId : asset.alt,
-        });
+      // Asset ids referenced in the content but never declared in the file get
+      // fresh ids too, so a leftover ref can never match a live id in this doc.
+      const referenced = new Set<string>();
+      for (const block of result.doc.blocks) {
+        for (const id of extractReferencedAssetIds(block.content)) {
+          referenced.add(id);
+        }
       }
+      const undeclared = [...referenced].filter((id) => !idMap.has(id));
+      const undeclaredAssetIds =
+        undeclared.length > 0 ? allocateAssetIds(undeclared.length) : [];
+      undeclared.forEach((id, i) => idMap.set(id, undeclaredAssetIds[i]));
 
-      const newBlocks: Block[] = result.doc.blocks.map((block, i) => ({
-        ...block,
-        id: blockIds[i],
-        assetIds: block.assetIds.map((old) => idMap.get(old) ?? old),
-        content: block.content.replace(/\[img_\d+\]/g, (ref) => {
-          const old = ref.slice(1, -1);
-          return `[${idMap.get(old) ?? old}]`;
-        }),
+      const blockIds = allocateBlockIds(result.doc.blocks.length);
+
+      const newAssets: Asset[] = declaredIds.map((oldId, i) => ({
+        ...result.doc.assets[oldId],
+        id: declaredAssetIds[i],
+        alt:
+          result.doc.assets[oldId].alt === oldId
+            ? declaredAssetIds[i]
+            : result.doc.assets[oldId].alt,
       }));
+
+      const newBlocks: Block[] = result.doc.blocks.map((block, i) => {
+        const content = remapAssetRefs(block.content, idMap);
+        return {
+          ...block,
+          id: blockIds[i],
+          content,
+          assetIds: extractReferencedAssetIds(content),
+        };
+      });
 
       appendBlocks(newBlocks, newAssets);
       useDocumentStore.getState().reserialize();

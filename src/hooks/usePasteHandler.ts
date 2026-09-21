@@ -9,7 +9,6 @@ import { processPaste } from "../lib/clipboard";
 export function usePasteHandler() {
   const doc = useDocumentStore((s) => s.doc);
   const appendBlocks = useDocumentStore((s) => s.appendBlocks);
-  const editorMode = useDocumentStore((s) => s.editorMode);
   const allocateBlockId = useDocumentStore((s) => s.allocateBlockId);
   const allocateAssetId = useDocumentStore((s) => s.allocateAssetId);
 
@@ -17,11 +16,15 @@ export function usePasteHandler() {
     const handler = async (event: ClipboardEvent) => {
       if (!doc) return;
 
-      // If user is editing in the markdown textarea, let native paste work
+      // If the user is pasting into an editable field (e.g. the markdown
+      // textarea or an input), let the native paste happen so the editor's
+      // local state stays in sync. Intercepting would append a block behind
+      // the editor and that block would be lost on the next mode switch.
       const target = event.target as HTMLElement;
       if (
-        editorMode === "markdown" &&
-        (target.tagName === "TEXTAREA" || target.tagName === "INPUT")
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "INPUT" ||
+        target.isContentEditable
       ) {
         return;
       }
@@ -43,5 +46,5 @@ export function usePasteHandler() {
 
     document.addEventListener("paste", handler);
     return () => document.removeEventListener("paste", handler);
-  }, [doc, appendBlocks, editorMode, allocateBlockId, allocateAssetId]);
+  }, [doc, appendBlocks, allocateBlockId, allocateAssetId]);
 }

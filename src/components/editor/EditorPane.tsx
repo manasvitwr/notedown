@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Panel } from "../shared/Panel";
 import { ModeToggle } from "./ModeToggle";
 import { MarkdownEditor } from "./MarkdownEditor";
@@ -7,24 +7,23 @@ import { DataView } from "./DataView";
 import { StatusBar } from "./StatusBar";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { parseNotedownFile } from "../../lib/markdownParser";
-import type { EditorMode } from "../../types";
+import { BLOCK_PREFIX } from "../../constants/defaults";
+import type { Block, EditorMode } from "../../types";
 
 /**
  * Extract text that appears outside <!-- nd:block --> / <!-- nd:endblock --> fences
  * in a .nd.md markdown string. This catches content pasted in markdown mode
  * that wasn't wrapped in block comment markers.
  */
-function extractFreeTextOutsideBlocks(
-  md: string,
-  existingBlockCount: number
-): string {
+function extractFreeTextOutsideBlocks(md: string): string {
   // Remove frontmatter
   const noFrontmatter = md.replace(/^---\n[\s\S]*?\n---\n*/, "");
-  // Remove all nd:block...nd:endblock sections
-  const noBlocks = noFrontmatter.replace(
-    /<!-- nd:block \S+ \S+ \S+ -->[\s\S]*?<!-- nd:endblock \1 -->/g,
-    ""
-  );
+  // Remove all nd:block...nd:endblock sections. Capture the block id so each
+  // section is terminated by its own closing fence (`\1`), and accept the
+  // optional ` collapsed` marker emitted for collapsed blocks.
+  const blockSectionRegex =
+    /<!-- nd:block (\S+) \S+ \S+(?: collapsed)? -->[\s\S]*?<!-- nd:endblock \1 -->/g;
+  const noBlocks = noFrontmatter.replace(blockSectionRegex, "");
   // Remove nd:data section
   const noData = noBlocks.replace(
     /<!-- nd:data -->[\s\S]*?<!-- nd:enddata -->/g,
@@ -53,6 +52,70 @@ export function EditorPane() {
   // Local editor state — only used in markdown mode
   const [localMarkdown, setLocalMarkdown] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+  const markdownEditorRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Keep the markdown textarea focused while in markdown mode so paste always
+  // lands in the editor instead of being intercepted by the global paste handler.
+  useEffect(() => {
+    if (editorMode !== "markdown") return;
+    const timer = setTimeout(() => markdownEditorRef.current?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, [editorMode]);
+
+  // Sync edited markdown back to structured state
+  const syncMarkdownToStore = useCallback(
+    (md: string) => {
+      if (!doc) return;
+      try {
+        const parsed = parseNotedownFile(md, doc.filename);
+
+        // Re-parsing rebuilds blocks from scratch (source becomes "import",
+        // tags/updatedAt are dropped). Restore fields that the serializer does
+        // not emit so a mode switch never erases that metadata.
+        const existingById = new Map(doc.blocks.map((b) => [b.id, b]));
+        for (const block of parsed.blocks) {
+          const existing = existingById.get(block.id);
+          if (existing) {
+            block.source = existing.source;
+            block.tags = existing.tags;
+            block.updatedAt = existing.updatedAt;
+          }
+        }
+
+        // Extract free text outside block fences and wrap into a new block.
+        // This only fires when the user actually typed content outside a fence,
+        // so switching modes with no edits is a no-op.
+        const freeText = extractFreeTextOutsideBlocks(md);
+        if (freeText.trim()) {
+          const now = new Date().toISOString();
+          const maxBlockNum = parsed.blocks.reduce((max, b) => {
+            const num = parseInt(b.id.replace(BLOCK_PREFIX, ""), 10);
+            return num > max ? num : max;
+          }, 0);
+          const newBlock: Block = {
+            id: `${BLOCK_PREFIX}${String(maxBlockNum + 1).padStart(3, "0")}`,
+            type: "text",
+            content: freeText.trim(),
+            createdAt: now,
+            tags: [],
+            assetIds: [],
+            source: "edit",
+          };
+          parsed.blocks.push(newBlock);
+        }
+
+        // Preserve the document ID and settings, merge
+        setDocument({
+          ...parsed,
+          id: doc.id,
+          settings: doc.settings,
+        });
+      } catch (err) {
+        console.error("Failed to parse edited markdown:", err);
+      }
+    },
+    [doc, setDocument]
+  );
 
   // When switching TO markdown mode, populate local state
   const handleModeChange = useCallback(
@@ -70,46 +133,7 @@ export function EditorPane() {
       }
       setEditorMode(mode);
     },
-    [editorMode, serializedMarkdown, localMarkdown, isEditing, setEditorMode, reserialize]
-  );
-
-  // Sync edited markdown back to structured state
-  const syncMarkdownToStore = useCallback(
-    (md: string) => {
-      if (!doc) return;
-      try {
-        const parsed = parseNotedownFile(md, doc.filename);
-
-        // Extract free text outside block fences and wrap into new blocks
-        const freeText = extractFreeTextOutsideBlocks(md, parsed.blocks.length);
-        if (freeText.trim()) {
-          const now = new Date().toISOString();
-          const maxBlockNum = parsed.blocks.reduce((max, b) => {
-            const num = parseInt(b.id.replace("b_", ""), 10);
-            return num > max ? num : max;
-          }, 0);
-          const newBlock = {
-            id: `b_${String(maxBlockNum + 1).padStart(3, "0")}`,
-            type: "text" as const,
-            content: freeText.trim(),
-            createdAt: now,
-            tags: [],
-            assetIds: [],
-            source: "edit" as const,
-          };
-          parsed.blocks.push(newBlock);
-        }
-
-        // Preserve the document ID and merge
-        setDocument({
-          ...parsed,
-          id: doc.id,
-        });
-      } catch (err) {
-        console.error("Failed to parse edited markdown:", err);
-      }
-    },
-    [doc, setDocument]
+    [editorMode, localMarkdown, isEditing, setEditorMode, reserialize, syncMarkdownToStore]
   );
 
   // Compute display markdown — preserve block markers for scroll anchors,
@@ -132,6 +156,7 @@ export function EditorPane() {
           <MarkdownEditor
             value={isEditing ? localMarkdown : serializedMarkdown}
             onChange={setLocalMarkdown}
+            editorRef={markdownEditorRef}
           />
         )}
         {editorMode === "preview" && (

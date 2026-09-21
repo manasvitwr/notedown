@@ -4,22 +4,25 @@ import { processPaste } from "../lib/clipboard";
 
 /**
  * Global paste event listener.
- * Intercepts Ctrl+V, processes clipboard, appends blocks to store.
+ * Intercepts Ctrl+V outside editable fields, processes clipboard and appends
+ * blocks to the store. In markdown mode this keeps preview and the raw view in
+ * sync because the appended blocks are immediately re-serialized.
  */
 export function usePasteHandler() {
   const doc = useDocumentStore((s) => s.doc);
   const appendBlocks = useDocumentStore((s) => s.appendBlocks);
   const allocateBlockId = useDocumentStore((s) => s.allocateBlockId);
   const allocateAssetId = useDocumentStore((s) => s.allocateAssetId);
+  const editorMode = useDocumentStore((s) => s.editorMode);
+  const reserialize = useDocumentStore((s) => s.reserialize);
 
   useEffect(() => {
     const handler = async (event: ClipboardEvent) => {
       if (!doc) return;
 
-      // If the user is pasting into an editable field (e.g. the markdown
-      // textarea or an input), let the native paste happen so the editor's
-      // local state stays in sync. Intercepting would append a block behind
-      // the editor and that block would be lost on the next mode switch.
+      // Pasting into an editable field (markdown textarea, modal inputs) is
+      // handled by the field itself — the markdown textarea turns the paste
+      // into a proper pasted block. Don't intercept those here.
       const target = event.target as HTMLElement;
       if (
         target.tagName === "TEXTAREA" ||
@@ -38,6 +41,11 @@ export function usePasteHandler() {
         });
         if (blocks.length > 0) {
           appendBlocks(blocks, assets);
+          // In markdown mode the raw view is a mirror of the serialization, so
+          // refresh it right away to show the just-pasted card.
+          if (editorMode === "markdown") {
+            reserialize();
+          }
         }
       } catch (err) {
         console.error("Paste processing failed:", err);
@@ -46,5 +54,5 @@ export function usePasteHandler() {
 
     document.addEventListener("paste", handler);
     return () => document.removeEventListener("paste", handler);
-  }, [doc, appendBlocks, allocateBlockId, allocateAssetId]);
+  }, [doc, appendBlocks, allocateBlockId, allocateAssetId, editorMode, reserialize]);
 }

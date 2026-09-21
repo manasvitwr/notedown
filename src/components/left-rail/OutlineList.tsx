@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { formatBlockTime } from "../../lib/dates";
+import { scrollToBlock } from "../../lib/scrollToBlock";
 import { FileText, Link, Code, Mic, Image, Layers } from "lucide-react";
 import type { BlockType } from "../../types";
 
@@ -52,10 +53,7 @@ export function OutlineList() {
         {outline.map((item) => (
           <button
             key={item.id}
-            onClick={() => {
-              const el = document.getElementById(`block-${item.id}`);
-              el?.scrollIntoView({ behavior: "smooth", block: "center" });
-            }}
+            onClick={() => scrollToBlock(item.id, item.type)}
             className="w-full flex items-center gap-1.5 px-2 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover rounded-[var(--radius-xs)] transition-colors text-left truncate"
           >
             <span className="shrink-0 text-text-dim">

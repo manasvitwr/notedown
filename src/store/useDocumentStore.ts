@@ -38,6 +38,7 @@ interface DocumentStore {
   appendBlocks: (blocks: Block[], assets: Asset[]) => void;
   deleteBlock: (blockId: string) => void;
   moveBlock: (blockId: string, direction: "up" | "down") => void;
+  reorderBlocks: (orderedIds: string[]) => void;
   toggleBlockCollapse: (blockId: string) => void;
 
   // ─── Asset Actions ──────────────────────────────────────
@@ -46,6 +47,8 @@ interface DocumentStore {
   // ─── ID Allocation (atomic, monotonic) ──────────────────
   allocateBlockId: () => string;
   allocateAssetId: () => string;
+  allocateBlockIds: (count: number) => string[];
+  allocateAssetIds: (count: number) => string[];
 
   // ─── Editor ─────────────────────────────────────────────
   setEditorMode: (mode: EditorMode) => void;
@@ -205,6 +208,25 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     set({ doc: updated, saveStatus: "unsaved" });
   },
 
+  reorderBlocks: (orderedIds: string[]) => {
+    const { doc } = get();
+    if (!doc) return;
+    if (orderedIds.length !== doc.blocks.length) return;
+    const idSet = new Set(doc.blocks.map((b) => b.id));
+    if (orderedIds.length !== new Set(orderedIds).size) return;
+    if (!orderedIds.every((id) => idSet.has(id))) return;
+    const byId = new Map(doc.blocks.map((b) => [b.id, b]));
+    const updated: DocumentState = {
+      ...doc,
+      blocks: orderedIds
+        .map((id) => byId.get(id))
+        .filter((b): b is Block => Boolean(b)),
+      updatedAt: new Date().toISOString(),
+    };
+    // Defer serialization — recomputed lazily when needed
+    set({ doc: updated, saveStatus: "unsaved" });
+  },
+
   // ─── Asset Actions ──────────────────────────────────────
 
   addAsset: (asset: Asset) => {
@@ -234,9 +256,35 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     return id;
   },
 
+  allocateBlockIds: (count: number) => {
+    const { nextBlockNum } = get();
+    const ids: string[] = [];
+    for (let i = 0; i < count; i++) {
+      ids.push(`${BLOCK_PREFIX}${String(nextBlockNum + i).padStart(3, "0")}`);
+    }
+    set({ nextBlockNum: nextBlockNum + count });
+    return ids;
+  },
+
+  allocateAssetIds: (count: number) => {
+    const { nextAssetNum } = get();
+    const ids: string[] = [];
+    for (let i = 0; i < count; i++) {
+      ids.push(`${ASSET_PREFIX}${String(nextAssetNum + i).padStart(3, "0")}`);
+    }
+    set({ nextAssetNum: nextAssetNum + count });
+    return ids;
+  },
+
   // ─── Editor ─────────────────────────────────────────────
 
-  setEditorMode: (mode: EditorMode) => set({ editorMode: mode }),
+  setEditorMode: (mode: EditorMode) => {
+    // Entering markdown always reads the freshest serialization. Appends defer
+    // serialization, so a tab switch (incl. scrollToBlock's) must resync; the
+    // pending draft itself is flushed by the textarea blur before the switch.
+    if (mode === "markdown") get().reserialize();
+    set({ editorMode: mode });
+  },
 
   // ─── Serialization ──────────────────────────────────────
 

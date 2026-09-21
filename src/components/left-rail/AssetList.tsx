@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { formatBytes } from "../../lib/size";
+import { scrollToBlock } from "../../lib/scrollToBlock";
 
 export function AssetList() {
   const doc = useDocumentStore((s) => s.doc);
@@ -37,8 +38,9 @@ export function AssetList() {
               onClick={() => {
                 const blockId = assetToBlockId[asset.id];
                 if (blockId) {
-                  const el = document.getElementById(`block-${blockId}`);
-                  el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  const type =
+                    doc?.blocks.find((b) => b.id === blockId)?.type ?? "image";
+                  scrollToBlock(blockId, type);
                 }
               }}
               className="w-full flex items-center gap-2 px-2 py-1 rounded-[var(--radius-xs)] hover:bg-bg-hover transition-colors text-left"

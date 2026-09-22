@@ -82,10 +82,12 @@ export function parseNotedownFile(
     /<!-- nd:data -->([\s\S]*?)<!-- nd:enddata -->/;
   const dataMatch = dataRegex.exec(raw);
   if (dataMatch) {
-    const refRegex = /\[(\w+)\]:\s*data:(image\/[\w+]+);base64,(\S+)/g;
+    const refRegex =
+      /\[(\w+)\]:\s*data:(image\/(?:webp|jpeg|png));base64,(\S+)/g;
     let refMatch;
     while ((refMatch = refRegex.exec(dataMatch[1])) !== null) {
       const [, id, mime, base64] = refMatch;
+      // The regex anchors the mime to the allowlist, so the cast is safe.
       assets[id] = reconstructAsset(id, mime as ImageMime, base64);
     }
   }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { scrollToBlock } from "../../lib/scrollToBlock";
 import { formatBytes } from "../../lib/size";
+import { isAllowedImageMime } from "../../lib/imageMime";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { Asset } from "../../types";
 
@@ -9,7 +10,19 @@ const KIND_LABELS: Partial<Record<Asset["kind"], string>> = {
   image: "image",
 };
 
-function dataUri(asset: Asset): string {
+/** Blob URL for a data: image URI, kept short-lived so it is never a navigable
+ * raw data: URL held in the DOM. */
+function dataUriToBlobUrl(uri: string): string {
+  const [meta, base64] = uri.split(",");
+  const mime = meta.match(/^data:([^;]+)/)?.[1] ?? "application/octet-stream";
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: mime }));
+}
+
+function dataUri(asset: Asset): string | null {
+  if (!isAllowedImageMime(asset.mime)) return null;
   return `data:${asset.mime};base64,${asset.base64}`;
 }
 
@@ -27,6 +40,13 @@ function AssetCard({ asset, blockId }: AssetCardProps) {
   const [showSource, setShowSource] = useState(false);
   const uri = dataUri(asset);
 
+  const handleOpen = () => {
+    if (!uri) return;
+    const blobUrl = dataUriToBlobUrl(uri);
+    window.open(blobUrl, "_blank", "noopener");
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+  };
+
   const jumpToBlock = () => {
     if (blockId) scrollToBlock(blockId, "image");
   };
@@ -36,12 +56,18 @@ function AssetCard({ asset, blockId }: AssetCardProps) {
       id={`asset-${asset.id}`}
       className="bg-bg-elevated border border-border rounded-[var(--radius-xs)] overflow-hidden"
     >
-      <img
-        src={uri}
-        alt={asset.alt ?? asset.id}
-        loading="lazy"
-        className="w-full h-20 object-cover"
-      />
+      {uri ? (
+        <img
+          src={uri}
+          alt={asset.alt ?? asset.id}
+          loading="lazy"
+          className="w-full h-20 object-cover"
+        />
+      ) : (
+        <div className="w-full h-20 flex items-center justify-center bg-bg-input text-text-dim text-[10px]">
+          unsupported type
+        </div>
+      )}
       <div className="p-2 space-y-1">
         <div className="text-[10px] text-text-primary font-medium">
           {asset.id}
@@ -51,14 +77,15 @@ function AssetCard({ asset, blockId }: AssetCardProps) {
           {asset.width > 0 ? ` · ${asset.width}×${asset.height}` : ""}
         </div>
         <div className="flex items-center gap-2">
-          <a
-            href={uri}
-            target="_blank"
-            rel="noreferrer"
-            className="text-[10px] text-accent hover:underline"
-          >
-            Open
-          </a>
+          {uri && (
+            <button
+              type="button"
+              onClick={handleOpen}
+              className="text-[10px] text-accent hover:underline"
+            >
+              Open
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowSource((s) => !s)}

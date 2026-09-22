@@ -300,9 +300,16 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   setAssetsExpanded: (open: boolean) => set({ assetsExpanded: open }),
 
   requestAssetHighlight: (assetId: string) =>
-    set({
-      assetsExpanded: true,
-      highlightAsset: { assetId, nonce: Date.now() },
+    set((state) => {
+      // Only expand/highlight when the asset actually exists — a dangling
+      // reference must not force the panel open or burn a stale highlight.
+      if (!state.doc?.assets[assetId]) {
+        return { highlightAsset: null };
+      }
+      return {
+        assetsExpanded: true,
+        highlightAsset: { assetId, nonce: Date.now() },
+      };
     }),
 
   clearAssetHighlight: () => set({ highlightAsset: null }),

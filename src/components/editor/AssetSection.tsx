@@ -159,7 +159,11 @@ export function AssetSection() {
         return;
       }
       attempts += 1;
-      if (attempts > 12) return;
+      if (attempts > 12) {
+        // Target never mounted — don't leave the request pending.
+        clearAssetHighlight();
+        return;
+      }
       requestAnimationFrame(tick);
     };
     tick();

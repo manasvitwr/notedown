@@ -21,7 +21,11 @@ export function isMarkdownDisplayable(type: BlockType): boolean {
  * - Data mode: same destinations as markdown mode, but the editor has to
  *   switch tabs first, so the scroll waits for the destination to mount.
  */
-export function scrollToBlock(blockId: string, blockType: BlockType): void {
+export function scrollToBlock(
+  blockId: string,
+  blockType: BlockType,
+  assetId?: string
+): void {
   const { editorMode, setEditorMode } = useDocumentStore.getState();
 
   if (editorMode === "preview") {
@@ -34,13 +38,16 @@ export function scrollToBlock(blockId: string, blockType: BlockType): void {
       scrollMarkdownTextareaToBlockWhenReady(blockId);
     } else {
       // Images don't render as raw markdown. Open the Assets panel and
-      // highlight the asset instead of switching tabs.
-      const block = useDocumentStore
-        .getState()
-        .doc?.blocks.find((b) => b.id === blockId);
-      const assetId = block?.assetIds[0];
-      if (assetId) {
-        useDocumentStore.getState().requestAssetHighlight(assetId);
+      // highlight the asset instead of switching tabs. Prefer the explicitly
+      // requested asset so a Block-button jump from an asset card lands back
+      // on the clicked asset rather than always the block's first one.
+      const target =
+        assetId ??
+        useDocumentStore
+          .getState()
+          .doc?.blocks.find((b) => b.id === blockId)?.assetIds[0];
+      if (target) {
+        useDocumentStore.getState().requestAssetHighlight(target);
       }
     }
     return;

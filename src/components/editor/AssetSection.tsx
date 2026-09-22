@@ -48,7 +48,7 @@ function AssetCard({ asset, blockId }: AssetCardProps) {
   };
 
   const jumpToBlock = () => {
-    if (blockId) scrollToBlock(blockId, "image");
+    if (blockId) scrollToBlock(blockId, "image", asset.id);
   };
 
   return (

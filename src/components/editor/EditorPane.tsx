@@ -9,7 +9,7 @@ import { AssetSection } from "./AssetSection";
 import { StatusBar } from "./StatusBar";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { parseNotedownFile, createBlockSectionRegex, stripDataSection } from "../../lib/markdownParser";
-import { extractAssetIds } from "../../lib/assetIds";
+import { extractAssetIds, ASSET_ID_SOURCE } from "../../lib/assetIds";
 import { serializeDocument } from "../../lib/markdownSerializer";
 import { processPaste } from "../../lib/clipboard";
 import type { Block, EditorMode } from "../../types";
@@ -99,7 +99,7 @@ export function EditorPane() {
             content: freeText.trim(),
             createdAt: new Date().toISOString(),
             tags: [],
-            assetIds: [],
+            assetIds: extractAssetIds(freeText.trim()),
             source: "edit",
           };
           parsed.blocks.push(newBlock);
@@ -123,7 +123,11 @@ export function EditorPane() {
         // own id, so removing a block that referenced one also prunes it.
         parsed.preservedAssetLines = (doc.preservedAssetLines ?? []).filter(
           (line) => {
-            const id = line.match(/^\[([^\]]+)\]:/)?.[1];
+            // Same id token shape as extractAssetIds so hyphenated ids like
+            // `my-vid` survive the sweep just like img_ ids do.
+            const id = line.match(
+              new RegExp(`^\\[(${ASSET_ID_SOURCE})\\]:`)
+            )?.[1];
             return !!id && referencedAssetIds.has(id);
           }
         );

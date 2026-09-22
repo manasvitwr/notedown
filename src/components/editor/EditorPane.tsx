@@ -9,6 +9,7 @@ import { AssetSection } from "./AssetSection";
 import { StatusBar } from "./StatusBar";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { parseNotedownFile, createBlockSectionRegex, stripDataSection } from "../../lib/markdownParser";
+import { extractAssetIds } from "../../lib/assetIds";
 import { serializeDocument } from "../../lib/markdownSerializer";
 import { processPaste } from "../../lib/clipboard";
 import type { Block, EditorMode } from "../../types";
@@ -108,14 +109,10 @@ export function EditorPane() {
         // nd:data section is stripped from the editable value), so preserve
         // them across the round-trip. Keep only assets still referenced by the
         // freshly parsed blocks (mirroring deleteBlock) instead of leaking
-        // orphans. Reference ids are matched against block content in the same
-        // bracket form the parser recognizes — allowlisted ids on import are
-        // not necessarily img_-prefixed, so block.assetIds alone is too narrow.
-        const blockContent = parsed.blocks.map((b) => b.content).join("\n");
+        // orphans. Reference ids are matched with the shared extractAssetIds
+        // helper — the same pattern the parser accepts for definitions.
         const referencedAssetIds = new Set(
-          Object.keys(doc.assets).filter((id) =>
-            blockContent.includes(`[${id}]`)
-          )
+          parsed.blocks.flatMap((b) => extractAssetIds(b.content))
         );
         parsed.assets = Object.fromEntries(
           Object.entries(doc.assets).filter(([id]) =>
@@ -127,7 +124,7 @@ export function EditorPane() {
         parsed.preservedAssetLines = (doc.preservedAssetLines ?? []).filter(
           (line) => {
             const id = line.match(/^\[([^\]]+)\]:/)?.[1];
-            return !!id && blockContent.includes(`[${id}]`);
+            return !!id && referencedAssetIds.has(id);
           }
         );
 

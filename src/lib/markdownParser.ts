@@ -1,6 +1,7 @@
 import type { Asset, Block, BlockType, DocumentState, ImageMime, StorageMode } from "../types";
 import { DEFAULT_SETTINGS } from "../constants/defaults";
 import { nanoid } from "nanoid";
+import { extractAssetIds } from "./assetIds";
 
 /**
  * Source for the block-section regex, shared with the editor so parsing and
@@ -70,7 +71,7 @@ export function parseNotedownFile(
       content,
       createdAt,
       tags: [],
-      assetIds: extractAssetRefs(content),
+      assetIds: extractAssetIds(content),
       source: "import",
       collapsed: isCollapsed || undefined,
     });
@@ -210,20 +211,6 @@ function parseFrontmatter(raw: string): Frontmatter | null {
 function stripBlockHeading(content: string): string {
   // Remove leading "## HH:MM · type\n" pattern
   return content.replace(/^##\s+\d{2}:\d{2}\s+·\s+\S+\s*\n\s*/, "");
-}
-
-/**
- * Extract asset reference IDs from markdown content.
- * Matches ![alt][img_001] patterns.
- */
-function extractAssetRefs(content: string): string[] {
-  const refs: string[] = [];
-  const regex = /\[img_\d+\]/g;
-  let m;
-  while ((m = regex.exec(content)) !== null) {
-    refs.push(m[0].slice(1, -1)); // strip brackets
-  }
-  return refs;
 }
 
 /**

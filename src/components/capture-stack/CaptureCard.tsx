@@ -2,6 +2,7 @@ import type { Block } from "../../types";
 import { formatBlockTime } from "../../lib/dates";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { scrollToBlock } from "../../lib/scrollToBlock";
+import { dataUri } from "../../lib/imageMime";
 import { FileText, Link, Code, Mic, Image, Layers, ChevronUp, ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
 import type { BlockType } from "../../types";
 
@@ -102,7 +103,7 @@ export function CaptureCard({ block, displayIndex, isDragging, isDimmed }: Captu
         {imageAsset && (
           <div className="rounded-[var(--radius-xs)] overflow-hidden border border-border">
             <img
-              src={`data:${imageAsset.mime};base64,${imageAsset.base64}`}
+              src={dataUri(imageAsset) ?? undefined}
               alt={imageAsset.alt ?? "screenshot"}
               className="w-full h-20 object-cover"
               draggable={false}

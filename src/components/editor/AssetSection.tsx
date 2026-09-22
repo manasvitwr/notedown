@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { scrollToBlock } from "../../lib/scrollToBlock";
 import { formatBytes } from "../../lib/size";
-import { isAllowedImageMime } from "../../lib/imageMime";
+import { dataUri } from "../../lib/imageMime";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { Asset } from "../../types";
 
@@ -19,11 +19,6 @@ function dataUriToBlobUrl(uri: string): string {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return URL.createObjectURL(new Blob([bytes], { type: mime }));
-}
-
-function dataUri(asset: Asset): string | null {
-  if (!isAllowedImageMime(asset.mime)) return null;
-  return `data:${asset.mime};base64,${asset.base64}`;
 }
 
 function kindLabel(kind: Asset["kind"], count: number): string {

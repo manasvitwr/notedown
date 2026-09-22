@@ -193,8 +193,12 @@ export function AssetSection() {
     };
     tick();
     return () => {
+      // Only cancel the retry loop. Do NOT clear the removal timer here: this
+      // effect clears highlightAsset on success, which immediately re-runs the
+      // cleanup and would cancel the very timer meant to strip the flash.
+      // The one-shot timer always fires on the (possibly now detached) element,
+      // which is harmless, and it is cleared before each new highlight in tick.
       cancelled = true;
-      clearFlashTimer();
     };
   }, [highlightAsset, clearAssetHighlight]);
 

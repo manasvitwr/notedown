@@ -39,6 +39,7 @@ interface AssetCardProps {
 function AssetCard({ asset, blockId }: AssetCardProps) {
   const [showSource, setShowSource] = useState(false);
   const [openError, setOpenError] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const uri = dataUri(asset);
 
   const handleOpen = () => {
@@ -61,16 +62,17 @@ function AssetCard({ asset, blockId }: AssetCardProps) {
       id={`asset-${asset.id}`}
       className="bg-bg-elevated border border-border rounded-[var(--radius-xs)] overflow-hidden"
     >
-      {uri ? (
+      {uri && !imgError ? (
         <img
           src={uri}
           alt={asset.alt ?? asset.id}
           loading="lazy"
+          onError={() => setImgError(true)}
           className="w-full h-20 object-cover"
         />
       ) : (
         <div className="w-full h-20 flex items-center justify-center bg-bg-input text-text-dim text-[10px]">
-          unsupported type
+          {uri ? "corrupt image" : "unsupported type"}
         </div>
       )}
       <div className="p-2 space-y-1">

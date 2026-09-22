@@ -76,6 +76,7 @@ export function CaptureCard({ block, displayIndex, isDragging, isDimmed }: Captu
     block.type === "image" && block.assetIds.length > 0
       ? doc?.assets[block.assetIds[0]]
       : null;
+  const imageUri = imageAsset ? dataUri(imageAsset) : null;
 
   return (
     <button
@@ -100,11 +101,11 @@ export function CaptureCard({ block, displayIndex, isDragging, isDimmed }: Captu
         }`}
       >
         {/* Image thumbnail */}
-        {imageAsset && (
+        {imageUri && (
           <div className="rounded-[var(--radius-xs)] overflow-hidden border border-border">
             <img
-              src={dataUri(imageAsset) ?? undefined}
-              alt={imageAsset.alt ?? "screenshot"}
+              src={imageUri}
+              alt={imageAsset?.alt ?? "screenshot"}
               className="w-full h-20 object-cover"
               draggable={false}
             />

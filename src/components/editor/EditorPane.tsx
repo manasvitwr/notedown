@@ -105,9 +105,18 @@ export function EditorPane() {
         }
 
         // Assets are system-managed and never edited in the textarea (the
-        // nd:data section is stripped from the editable value), so always
-        // preserve them. Without this, every markdown sync drops every asset.
-        parsed.assets = doc.assets;
+        // nd:data section is stripped from the editable value), so preserve
+        // them across the round-trip. Keep only assets still referenced by the
+        // freshly parsed blocks so removing an image block also prunes its
+        // base64 (mirroring deleteBlock), instead of leaking orphans.
+        const referencedAssetIds = new Set(
+          parsed.blocks.flatMap((b) => b.assetIds)
+        );
+        parsed.assets = Object.fromEntries(
+          Object.entries(doc.assets).filter(([id]) =>
+            referencedAssetIds.has(id)
+          )
+        );
 
         // Preserve the document ID and settings, merge
         setDocument({

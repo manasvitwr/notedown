@@ -5,6 +5,7 @@ import { ModeToggle } from "./ModeToggle";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { DataView } from "./DataView";
+import { AssetSection } from "./AssetSection";
 import { StatusBar } from "./StatusBar";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { parseNotedownFile, createBlockSectionRegex, stripDataSection } from "../../lib/markdownParser";
@@ -253,6 +254,7 @@ export function EditorPane() {
                 editorRef={markdownEditorRef}
               />
             </div>
+            <AssetSection />
           </div>
         )}
         {editorMode === "preview" && (

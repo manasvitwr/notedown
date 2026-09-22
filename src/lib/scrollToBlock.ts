@@ -4,7 +4,7 @@ import type { BlockType } from "../types";
 /**
  * Whether a block's content can be seen in the raw markdown textarea. Images
  * are stored as base64 data URIs in the file so they can't be "shown" there —
- * they only render in the preview tab.
+ * they render in the preview tab and, from markdown mode, in the Assets panel.
  */
 export function isMarkdownDisplayable(type: BlockType): boolean {
   return type !== "image";
@@ -16,8 +16,8 @@ export function isMarkdownDisplayable(type: BlockType): boolean {
  * - Preview mode: every block renders as an anchor div, so scroll straight to
  *   it (works for text and image alike).
  * - Markdown mode: displayable blocks scroll the textarea to that block's
- *   section; images (or anything else that can't render as raw text) switch to
- *   the preview tab and scroll to the image there.
+ *   section; images expand the Assets panel and highlight the matching asset,
+ *   keeping Markdown Mode in Markdown Mode.
  * - Data mode: same destinations as markdown mode, but the editor has to
  *   switch tabs first, so the scroll waits for the destination to mount.
  */
@@ -29,13 +29,25 @@ export function scrollToBlock(blockId: string, blockType: BlockType): void {
     return;
   }
 
-  if (editorMode === "markdown" && isMarkdownDisplayable(blockType)) {
-    scrollMarkdownTextareaToBlockWhenReady(blockId);
+  if (editorMode === "markdown") {
+    if (isMarkdownDisplayable(blockType)) {
+      scrollMarkdownTextareaToBlockWhenReady(blockId);
+    } else {
+      // Images don't render as raw markdown. Open the Assets panel and
+      // highlight the asset instead of switching tabs.
+      const block = useDocumentStore
+        .getState()
+        .doc?.blocks.find((b) => b.id === blockId);
+      const assetId = block?.assetIds[0];
+      if (assetId) {
+        useDocumentStore.getState().requestAssetHighlight(assetId);
+      }
+    }
     return;
   }
 
-  // Markdown/dimagable blocks in data mode and non-displayable blocks anywhere
-  // else need a tab switch first, then a scroll once the destination mounts.
+  // Non-displayable blocks in data mode need a tab switch first, then a scroll
+  // once the destination mounts.
   const destination = isMarkdownDisplayable(blockType) ? "markdown" : "preview";
   setEditorMode(destination);
   if (destination === "markdown") {

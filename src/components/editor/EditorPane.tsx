@@ -7,7 +7,7 @@ import { MarkdownPreview } from "./MarkdownPreview";
 import { DataView } from "./DataView";
 import { StatusBar } from "./StatusBar";
 import { useDocumentStore } from "../../store/useDocumentStore";
-import { parseNotedownFile, createBlockSectionRegex } from "../../lib/markdownParser";
+import { parseNotedownFile, createBlockSectionRegex, stripDataSection } from "../../lib/markdownParser";
 import { serializeDocument } from "../../lib/markdownSerializer";
 import { processPaste } from "../../lib/clipboard";
 import type { Block, EditorMode } from "../../types";
@@ -172,7 +172,7 @@ export function EditorPane() {
         if (blocks.length > 0) {
           appendBlocks(blocks, assets);
           reserialize();
-          setDraft(useDocumentStore.getState().serializedMarkdown);
+          setDraft(stripDataSection(useDocumentStore.getState().serializedMarkdown));
         }
       } catch (err) {
         console.error("Paste processing failed:", err);
@@ -192,7 +192,7 @@ export function EditorPane() {
     (mode: EditorMode) => {
       if (mode === "markdown" && editorMode !== "markdown") {
         reserialize();
-        setDraft(useDocumentStore.getState().serializedMarkdown);
+        setDraft(stripDataSection(useDocumentStore.getState().serializedMarkdown));
       } else if (editorMode === "markdown" && mode !== "markdown") {
         flushPendingSync();
         setDraft(null);
@@ -216,7 +216,7 @@ export function EditorPane() {
   useEffect(() => {
     if (editorMode !== "markdown") return;
     if (pendingSyncRef.current !== null) return;
-    setDraft(serializedMarkdown);
+    setDraft(stripDataSection(serializedMarkdown));
   }, [editorMode, serializedMarkdown]);
 
   // Compute display markdown fresh from the live store (never the stale cache)
@@ -243,13 +243,17 @@ export function EditorPane() {
       {/* Editor / Preview / Data */}
       <div className="flex-1 overflow-hidden">
         {editorMode === "markdown" && (
-          <MarkdownEditor
-            value={draft ?? serializedMarkdown}
-            onChange={handleMarkdownChange}
-            onPaste={handleMarkdownPaste}
-            onBlur={handleMarkdownBlur}
-            editorRef={markdownEditorRef}
-          />
+          <div className="flex flex-col h-full overflow-hidden">
+            <div className="flex-1 overflow-hidden min-h-0">
+              <MarkdownEditor
+                value={draft ?? stripDataSection(serializedMarkdown)}
+                onChange={handleMarkdownChange}
+                onPaste={handleMarkdownPaste}
+                onBlur={handleMarkdownBlur}
+                editorRef={markdownEditorRef}
+              />
+            </div>
+          </div>
         )}
         {editorMode === "preview" && (
           <MarkdownPreview markdown={previewMarkdown} />

@@ -103,6 +103,11 @@ export function EditorPane() {
           parsed.blocks.push(newBlock);
         }
 
+        // Assets are system-managed and never edited in the textarea (the
+        // nd:data section is stripped from the editable value), so always
+        // preserve them. Without this, every markdown sync drops every asset.
+        parsed.assets = doc.assets;
+
         // Preserve the document ID and settings, merge
         setDocument({
           ...parsed,

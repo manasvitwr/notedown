@@ -117,6 +117,9 @@ export function EditorPane() {
             referencedAssetIds.has(id)
           )
         );
+        // Preserved raw data-section lines are system-managed like assets — the
+        // textarea never edits the nd:data section, so carry them over.
+        parsed.preservedAssetLines = doc.preservedAssetLines;
 
         // Preserve the document ID and settings, merge
         setDocument({

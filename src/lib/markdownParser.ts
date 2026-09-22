@@ -76,19 +76,31 @@ export function parseNotedownFile(
     });
   }
 
-  // 4. Extract assets from nd:data section
+  // 4. Extract assets from nd:data section. Allowlisted image entries become
+  // structured assets; any other reference definitions are preserved verbatim
+  // (by line) so a foreign-mime entry in an imported file is never silently
+  // dropped on re-export, while never being stored as a renderable asset.
   const assets: Record<string, Asset> = {};
+  const preservedAssetLines: string[] = [];
   const dataRegex =
     /<!-- nd:data -->([\s\S]*?)<!-- nd:enddata -->/;
   const dataMatch = dataRegex.exec(raw);
   if (dataMatch) {
     const refRegex =
-      /\[(\w+)\]:\s*data:(image\/(?:webp|jpeg|png));base64,(\S+)/g;
-    let refMatch;
-    while ((refMatch = refRegex.exec(dataMatch[1])) !== null) {
-      const [, id, mime, base64] = refMatch;
-      // The regex anchors the mime to the allowlist, so the cast is safe.
-      assets[id] = reconstructAsset(id, mime as ImageMime, base64);
+      /^\[(\w+)\]:\s*data:(image\/(?:webp|jpeg|png));base64,(\S+)$/;
+    const anyRefLineRegex = /^\[[^\]]+\]:\s+\S.*$/;
+    for (const rawLine of dataMatch[1].split("\n")) {
+      const line = rawLine.trim();
+      const refMatch = refRegex.exec(line);
+      if (refMatch) {
+        const [, id, mime, base64] = refMatch;
+        // The regex anchors the mime to the allowlist, so the cast is safe.
+        assets[id] = reconstructAsset(id, mime as ImageMime, base64);
+        continue;
+      }
+      if (anyRefLineRegex.test(line)) {
+        preservedAssetLines.push(line);
+      }
     }
   }
 
@@ -105,6 +117,7 @@ export function parseNotedownFile(
     updatedAt: frontmatter.updated ?? new Date().toISOString(),
     blocks,
     assets,
+    preservedAssetLines,
     settings: {
       storageMode: (frontmatter.storage as StorageMode | undefined) ?? DEFAULT_SETTINGS.storageMode,
       imageMaxWidth:

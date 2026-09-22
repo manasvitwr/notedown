@@ -42,11 +42,16 @@ export function serializeDocument(doc: DocumentState): string {
 
   // ─── Data Section (assets) ──────────────────────────────────
   const assetEntries = Object.entries(doc.assets);
-  if (assetEntries.length > 0) {
+  const preservedLines = doc.preservedAssetLines ?? [];
+  if (assetEntries.length > 0 || preservedLines.length > 0) {
     parts.push("<!-- nd:data -->");
     parts.push("");
     for (const [id, asset] of assetEntries) {
       parts.push(`[${id}]: data:${asset.mime};base64,${asset.base64}`);
+      parts.push("");
+    }
+    for (const line of preservedLines) {
+      parts.push(line);
       parts.push("");
     }
     parts.push("<!-- nd:enddata -->");

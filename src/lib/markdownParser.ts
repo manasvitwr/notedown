@@ -19,9 +19,18 @@ const BLOCK_SECTION_SOURCE =
  * Remove the system-managed nd:data asset section from a raw .nd.md string.
  * Used by the markdown editor so base64 asset data never fills the textarea.
  * The section is regenerated from the store's asset registry on serialize.
+ * Only data sections OUTSIDE nd:block fences are stripped — the serializer
+ * always emits the system section after the final block — so identical markers
+ * inside user content (pasted notes, code examples) survive the round-trip.
  */
 export function stripDataSection(raw: string): string {
-  return raw.replace(/<!-- nd:data -->[\s\S]*?<!-- nd:enddata -->/g, "");
+  const re = new RegExp(
+    `(?:${BLOCK_SECTION_SOURCE})|<!-- nd:data -->[\\s\\S]*?<!-- nd:enddata -->`,
+    "g"
+  );
+  return raw.replace(re, (match) =>
+    match.startsWith("<!-- nd:block") ? match : ""
+  );
 }
 
 /**

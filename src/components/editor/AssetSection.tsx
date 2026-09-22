@@ -11,14 +11,19 @@ const KIND_LABELS: Partial<Record<Asset["kind"], string>> = {
 };
 
 /** Blob URL for a data: image URI, kept short-lived so it is never a navigable
- * raw data: URL held in the DOM. */
-function dataUriToBlobUrl(uri: string): string {
-  const [meta, base64] = uri.split(",");
-  const mime = meta.match(/^data:([^;]+)/)?.[1] ?? "application/octet-stream";
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return URL.createObjectURL(new Blob([bytes], { type: mime }));
+ * raw data: URL held in the DOM. Returns null when the base64 can't be decoded
+ * (e.g. a corrupt/legacy asset). */
+function dataUriToBlobUrl(uri: string): string | null {
+  try {
+    const [meta, base64] = uri.split(",");
+    const mime = meta.match(/^data:([^;]+)/)?.[1] ?? "application/octet-stream";
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return URL.createObjectURL(new Blob([bytes], { type: mime }));
+  } catch {
+    return null;
+  }
 }
 
 function kindLabel(kind: Asset["kind"], count: number): string {
@@ -33,11 +38,16 @@ interface AssetCardProps {
 
 function AssetCard({ asset, blockId }: AssetCardProps) {
   const [showSource, setShowSource] = useState(false);
+  const [openError, setOpenError] = useState(false);
   const uri = dataUri(asset);
 
   const handleOpen = () => {
     if (!uri) return;
     const blobUrl = dataUriToBlobUrl(uri);
+    if (!blobUrl) {
+      setOpenError(true);
+      return;
+    }
     window.open(blobUrl, "_blank", "noopener");
     setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
   };
@@ -96,6 +106,11 @@ function AssetCard({ asset, blockId }: AssetCardProps) {
             >
               Block
             </button>
+          )}
+          {openError && (
+            <span className="text-[10px] text-error">
+              couldn&apos;t open image
+            </span>
           )}
         </div>
         {showSource && (

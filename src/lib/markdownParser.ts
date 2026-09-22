@@ -1,6 +1,7 @@
 import type { Asset, Block, BlockType, DocumentState, ImageMime, StorageMode } from "../types";
 import { DEFAULT_SETTINGS } from "../constants/defaults";
 import { nanoid } from "nanoid";
+import { extractAssetIds } from "./assetIds";
 
 /**
  * Source for the block-section regex, shared with the editor so parsing and
@@ -13,6 +14,24 @@ import { nanoid } from "nanoid";
  */
 const BLOCK_SECTION_SOURCE =
   "<!-- nd:block (\\S+) (\\S+) (\\S+)(?: collapsed)? -->\\n([\\s\\S]*?)<!-- nd:endblock \\1 -->";
+
+/**
+ * Remove the system-managed nd:data asset section from a raw .nd.md string.
+ * Used by the markdown editor so base64 asset data never fills the textarea.
+ * The section is regenerated from the store's asset registry on serialize.
+ * Only data sections OUTSIDE nd:block fences are stripped — the serializer
+ * always emits the system section after the final block — so identical markers
+ * inside user content (pasted notes, code examples) survive the round-trip.
+ */
+export function stripDataSection(raw: string): string {
+  const re = new RegExp(
+    `(?:${BLOCK_SECTION_SOURCE})|<!-- nd:data -->[\\s\\S]*?<!-- nd:enddata -->`,
+    "g"
+  );
+  return raw.replace(re, (match) =>
+    match.startsWith("<!-- nd:block") ? match : ""
+  );
+}
 
 /**
  * Create a fresh global block-section regex. Each caller gets its own regex
@@ -61,23 +80,39 @@ export function parseNotedownFile(
       content,
       createdAt,
       tags: [],
-      assetIds: extractAssetRefs(content),
+      assetIds: extractAssetIds(content),
       source: "import",
       collapsed: isCollapsed || undefined,
     });
   }
 
-  // 4. Extract assets from nd:data section
+  // 4. Extract assets from nd:data section. Allowlisted image entries become
+  // structured assets; any other reference definitions are preserved verbatim
+  // (by line) so a foreign-mime entry in an imported file is never silently
+  // dropped on re-export, while never being stored as a renderable asset.
   const assets: Record<string, Asset> = {};
+  const preservedAssetLines: string[] = [];
   const dataRegex =
     /<!-- nd:data -->([\s\S]*?)<!-- nd:enddata -->/;
   const dataMatch = dataRegex.exec(raw);
   if (dataMatch) {
-    const refRegex = /\[(\w+)\]:\s*data:(image\/[\w+]+);base64,(\S+)/g;
-    let refMatch;
-    while ((refMatch = refRegex.exec(dataMatch[1])) !== null) {
-      const [, id, mime, base64] = refMatch;
-      assets[id] = reconstructAsset(id, mime as ImageMime, base64);
+    const refRegex =
+      /^\[(\w+)\]:\s*data:(image\/(?:webp|jpeg|png));base64,(\S+)$/;
+    // Match any reference definition line, with or without whitespace after the
+    // colon, so non-allowlisted entries are preserved verbatim.
+    const anyRefLineRegex = /^\[[^\]]+\]:\s*\S.*$/;
+    for (const rawLine of dataMatch[1].split("\n")) {
+      const line = rawLine.trim();
+      const refMatch = refRegex.exec(line);
+      if (refMatch) {
+        const [, id, mime, base64] = refMatch;
+        // The regex anchors the mime to the allowlist, so the cast is safe.
+        assets[id] = reconstructAsset(id, mime as ImageMime, base64);
+        continue;
+      }
+      if (anyRefLineRegex.test(line)) {
+        preservedAssetLines.push(line);
+      }
     }
   }
 
@@ -94,6 +129,7 @@ export function parseNotedownFile(
     updatedAt: frontmatter.updated ?? new Date().toISOString(),
     blocks,
     assets,
+    preservedAssetLines,
     settings: {
       storageMode: (frontmatter.storage as StorageMode | undefined) ?? DEFAULT_SETTINGS.storageMode,
       imageMaxWidth:
@@ -184,20 +220,6 @@ function parseFrontmatter(raw: string): Frontmatter | null {
 function stripBlockHeading(content: string): string {
   // Remove leading "## HH:MM · type\n" pattern
   return content.replace(/^##\s+\d{2}:\d{2}\s+·\s+\S+\s*\n\s*/, "");
-}
-
-/**
- * Extract asset reference IDs from markdown content.
- * Matches ![alt][img_001] patterns.
- */
-function extractAssetRefs(content: string): string[] {
-  const refs: string[] = [];
-  const regex = /\[img_\d+\]/g;
-  let m;
-  while ((m = regex.exec(content)) !== null) {
-    refs.push(m[0].slice(1, -1)); // strip brackets
-  }
-  return refs;
 }
 
 /**

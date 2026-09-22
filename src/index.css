@@ -264,6 +264,20 @@ body {
   font-size: 0.85em;
 }
 
+/* ─── Asset Panel Highlight ────────────────────────────────── */
+.asset-flash {
+  animation: asset-flash 1.5s ease-out;
+}
+
+@keyframes asset-flash {
+  0% {
+    box-shadow: 0 0 0 2px var(--color-accent), 0 0 14px var(--color-accent-dim);
+  }
+  100% {
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+
 /* ─── Capture Stack Drag / Reorder ─────────────────────────── */
 .reordering,
 .reordering * {

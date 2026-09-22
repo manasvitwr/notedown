@@ -1,5 +1,6 @@
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { formatBytes } from "../../lib/size";
+import { dataUri } from "../../lib/imageMime";
 
 export function DataView() {
   const doc = useDocumentStore((s) => s.doc);
@@ -54,7 +55,7 @@ export function DataView() {
                   </td>
                   <td className="py-2">
                     <img
-                      src={`data:${asset.mime};base64,${asset.base64}`}
+                      src={dataUri(asset) ?? undefined}
                       alt={asset.alt ?? asset.id}
                       className="h-8 rounded border border-border object-cover"
                     />

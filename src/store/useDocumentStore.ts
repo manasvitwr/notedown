@@ -53,6 +53,13 @@ interface DocumentStore {
   // ─── Editor ─────────────────────────────────────────────
   setEditorMode: (mode: EditorMode) => void;
 
+  // ─── Assets Panel UI (not persisted) ────────────────────
+  assetsExpanded: boolean;
+  highlightAsset: { assetId: string; nonce: number } | null;
+  setAssetsExpanded: (open: boolean) => void;
+  requestAssetHighlight: (assetId: string) => void;
+  clearAssetHighlight: () => void;
+
   // ─── Serialization ──────────────────────────────────────
   reserialize: () => void;
 
@@ -100,6 +107,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   serializedMarkdown: "",
   nextBlockNum: 1,
   nextAssetNum: 1,
+  assetsExpanded: false,
+  highlightAsset: null,
 
   // ─── Document Actions ───────────────────────────────────
 
@@ -285,6 +294,25 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (mode === "markdown") get().reserialize();
     set({ editorMode: mode });
   },
+
+  // ─── Assets Panel UI (not persisted) ────────────────────
+
+  setAssetsExpanded: (open: boolean) => set({ assetsExpanded: open }),
+
+  requestAssetHighlight: (assetId: string) =>
+    set((state) => {
+      // Only expand/highlight when the asset actually exists — a dangling
+      // reference must not force the panel open or burn a stale highlight.
+      if (!state.doc?.assets[assetId]) {
+        return { highlightAsset: null };
+      }
+      return {
+        assetsExpanded: true,
+        highlightAsset: { assetId, nonce: Date.now() },
+      };
+    }),
+
+  clearAssetHighlight: () => set({ highlightAsset: null }),
 
   // ─── Serialization ──────────────────────────────────────
 

@@ -5,9 +5,11 @@ import { ModeToggle } from "./ModeToggle";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { DataView } from "./DataView";
+import { AssetSection } from "./AssetSection";
 import { StatusBar } from "./StatusBar";
 import { useDocumentStore } from "../../store/useDocumentStore";
-import { parseNotedownFile, createBlockSectionRegex } from "../../lib/markdownParser";
+import { parseNotedownFile, createBlockSectionRegex, stripDataSection } from "../../lib/markdownParser";
+import { extractAssetIds, ASSET_ID_SOURCE } from "../../lib/assetIds";
 import { serializeDocument } from "../../lib/markdownSerializer";
 import { processPaste } from "../../lib/clipboard";
 import type { Block, EditorMode } from "../../types";
@@ -97,11 +99,38 @@ export function EditorPane() {
             content: freeText.trim(),
             createdAt: new Date().toISOString(),
             tags: [],
-            assetIds: [],
+            assetIds: extractAssetIds(freeText.trim()),
             source: "edit",
           };
           parsed.blocks.push(newBlock);
         }
+
+        // Assets are system-managed and never edited in the textarea (the
+        // nd:data section is stripped from the editable value), so preserve
+        // them across the round-trip. Keep only assets still referenced by the
+        // freshly parsed blocks (mirroring deleteBlock) instead of leaking
+        // orphans. Reference ids are matched with the shared extractAssetIds
+        // helper — the same pattern the parser accepts for definitions.
+        const referencedAssetIds = new Set(
+          parsed.blocks.flatMap((b) => extractAssetIds(b.content))
+        );
+        parsed.assets = Object.fromEntries(
+          Object.entries(doc.assets).filter(([id]) =>
+            referencedAssetIds.has(id)
+          )
+        );
+        // Preserved raw data-section lines get the same orphan sweep by their
+        // own id, so removing a block that referenced one also prunes it.
+        parsed.preservedAssetLines = (doc.preservedAssetLines ?? []).filter(
+          (line) => {
+            // Same id token shape as extractAssetIds so hyphenated ids like
+            // `my-vid` survive the sweep just like img_ ids do.
+            const id = line.match(
+              new RegExp(`^\\[(${ASSET_ID_SOURCE})\\]:`)
+            )?.[1];
+            return !!id && referencedAssetIds.has(id);
+          }
+        );
 
         // Preserve the document ID and settings, merge
         setDocument({
@@ -167,7 +196,7 @@ export function EditorPane() {
         if (blocks.length > 0) {
           appendBlocks(blocks, assets);
           reserialize();
-          setDraft(useDocumentStore.getState().serializedMarkdown);
+          setDraft(stripDataSection(useDocumentStore.getState().serializedMarkdown));
         }
       } catch (err) {
         console.error("Paste processing failed:", err);
@@ -187,7 +216,7 @@ export function EditorPane() {
     (mode: EditorMode) => {
       if (mode === "markdown" && editorMode !== "markdown") {
         reserialize();
-        setDraft(useDocumentStore.getState().serializedMarkdown);
+        setDraft(stripDataSection(useDocumentStore.getState().serializedMarkdown));
       } else if (editorMode === "markdown" && mode !== "markdown") {
         flushPendingSync();
         setDraft(null);
@@ -211,7 +240,7 @@ export function EditorPane() {
   useEffect(() => {
     if (editorMode !== "markdown") return;
     if (pendingSyncRef.current !== null) return;
-    setDraft(serializedMarkdown);
+    setDraft(stripDataSection(serializedMarkdown));
   }, [editorMode, serializedMarkdown]);
 
   // Compute display markdown fresh from the live store (never the stale cache)
@@ -238,13 +267,18 @@ export function EditorPane() {
       {/* Editor / Preview / Data */}
       <div className="flex-1 overflow-hidden">
         {editorMode === "markdown" && (
-          <MarkdownEditor
-            value={draft ?? serializedMarkdown}
-            onChange={handleMarkdownChange}
-            onPaste={handleMarkdownPaste}
-            onBlur={handleMarkdownBlur}
-            editorRef={markdownEditorRef}
-          />
+          <div className="flex flex-col h-full overflow-hidden">
+            <div className="flex-1 overflow-hidden min-h-0">
+              <MarkdownEditor
+                value={draft ?? stripDataSection(serializedMarkdown)}
+                onChange={handleMarkdownChange}
+                onPaste={handleMarkdownPaste}
+                onBlur={handleMarkdownBlur}
+                editorRef={markdownEditorRef}
+              />
+            </div>
+            <AssetSection />
+          </div>
         )}
         {editorMode === "preview" && (
           <MarkdownPreview markdown={previewMarkdown} />

@@ -60,6 +60,10 @@ export interface DocumentState {
   updatedAt: string;
   blocks: Block[];
   assets: Record<string, Asset>;
+  // Raw nd:data reference lines that can't be represented as structured assets
+  // (non-allowlisted MIME). Preserved verbatim so re-export never drops them,
+  // but never stored as renderable assets.
+  preservedAssetLines?: string[];
   settings: DocumentSettings;
 }
 

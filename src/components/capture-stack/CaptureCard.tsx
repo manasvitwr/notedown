@@ -2,6 +2,7 @@ import type { Block } from "../../types";
 import { formatBlockTime } from "../../lib/dates";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { scrollToBlock } from "../../lib/scrollToBlock";
+import { dataUri } from "../../lib/imageMime";
 import { FileText, Link, Code, Mic, Image, Layers, ChevronUp, ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
 import type { BlockType } from "../../types";
 
@@ -75,6 +76,7 @@ export function CaptureCard({ block, displayIndex, isDragging, isDimmed }: Captu
     block.type === "image" && block.assetIds.length > 0
       ? doc?.assets[block.assetIds[0]]
       : null;
+  const imageUri = imageAsset ? dataUri(imageAsset) : null;
 
   return (
     <button
@@ -99,11 +101,11 @@ export function CaptureCard({ block, displayIndex, isDragging, isDimmed }: Captu
         }`}
       >
         {/* Image thumbnail */}
-        {imageAsset && (
+        {imageUri && (
           <div className="rounded-[var(--radius-xs)] overflow-hidden border border-border">
             <img
-              src={`data:${imageAsset.mime};base64,${imageAsset.base64}`}
-              alt={imageAsset.alt ?? "screenshot"}
+              src={imageUri}
+              alt={imageAsset?.alt ?? "screenshot"}
               className="w-full h-20 object-cover"
               draggable={false}
             />

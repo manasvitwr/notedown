@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
 import { useDocumentStore } from "../../store/useDocumentStore";
+import { dataUri } from "../../lib/imageMime";
 import type { Asset } from "../../types";
 
 // Initialize markdown-it with highlight.js
@@ -41,8 +42,8 @@ md.renderer.rules.image = function (tokens, idx, options, env, self) {
   // If src is a reference ID like "img_001", resolve from assets
   const assets = (env as { assets?: Record<string, Asset> } | undefined)?.assets;
   if (assets && src in assets) {
-    const asset = assets[src];
-    token.attrSet("src", `data:${asset.mime};base64,${asset.base64}`);
+    const uri = dataUri(assets[src]);
+    if (uri) token.attrSet("src", uri);
   }
 
   return defaultRender(tokens, idx, options, env, self);
@@ -69,7 +70,8 @@ export function MarkdownPreview({ markdown }: MarkdownPreviewProps) {
       if (!alreadyHasRefs) {
         result += "\n\n";
         for (const [id, asset] of assetEntries) {
-          result += `[${id}]: data:${asset.mime};base64,${asset.base64}\n`;
+          const uri = dataUri(asset);
+          if (uri) result += `[${id}]: ${uri}\n`;
         }
       }
     }

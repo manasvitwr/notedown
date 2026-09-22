@@ -88,7 +88,9 @@ export function parseNotedownFile(
   if (dataMatch) {
     const refRegex =
       /^\[(\w+)\]:\s*data:(image\/(?:webp|jpeg|png));base64,(\S+)$/;
-    const anyRefLineRegex = /^\[[^\]]+\]:\s+\S.*$/;
+    // Match any reference definition line, with or without whitespace after the
+    // colon, so non-allowlisted entries are preserved verbatim.
+    const anyRefLineRegex = /^\[[^\]]+\]:\s*\S.*$/;
     for (const rawLine of dataMatch[1].split("\n")) {
       const line = rawLine.trim();
       const refMatch = refRegex.exec(line);

@@ -107,19 +107,29 @@ export function EditorPane() {
         // Assets are system-managed and never edited in the textarea (the
         // nd:data section is stripped from the editable value), so preserve
         // them across the round-trip. Keep only assets still referenced by the
-        // freshly parsed blocks so removing an image block also prunes its
-        // base64 (mirroring deleteBlock), instead of leaking orphans.
+        // freshly parsed blocks (mirroring deleteBlock) instead of leaking
+        // orphans. Reference ids are matched against block content in the same
+        // bracket form the parser recognizes — allowlisted ids on import are
+        // not necessarily img_-prefixed, so block.assetIds alone is too narrow.
+        const blockContent = parsed.blocks.map((b) => b.content).join("\n");
         const referencedAssetIds = new Set(
-          parsed.blocks.flatMap((b) => b.assetIds)
+          Object.keys(doc.assets).filter((id) =>
+            blockContent.includes(`[${id}]`)
+          )
         );
         parsed.assets = Object.fromEntries(
           Object.entries(doc.assets).filter(([id]) =>
             referencedAssetIds.has(id)
           )
         );
-        // Preserved raw data-section lines are system-managed like assets — the
-        // textarea never edits the nd:data section, so carry them over.
-        parsed.preservedAssetLines = doc.preservedAssetLines;
+        // Preserved raw data-section lines get the same orphan sweep by their
+        // own id, so removing a block that referenced one also prunes it.
+        parsed.preservedAssetLines = (doc.preservedAssetLines ?? []).filter(
+          (line) => {
+            const id = line.match(/^\[([^\]]+)\]:/)?.[1];
+            return !!id && blockContent.includes(`[${id}]`);
+          }
+        );
 
         // Preserve the document ID and settings, merge
         setDocument({

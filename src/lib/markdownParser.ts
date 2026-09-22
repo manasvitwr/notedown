@@ -15,6 +15,15 @@ const BLOCK_SECTION_SOURCE =
   "<!-- nd:block (\\S+) (\\S+) (\\S+)(?: collapsed)? -->\\n([\\s\\S]*?)<!-- nd:endblock \\1 -->";
 
 /**
+ * Remove the system-managed nd:data asset section from a raw .nd.md string.
+ * Used by the markdown editor so base64 asset data never fills the textarea.
+ * The section is regenerated from the store's asset registry on serialize.
+ */
+export function stripDataSection(raw: string): string {
+  return raw.replace(/<!-- nd:data -->[\s\S]*?<!-- nd:enddata -->/g, "");
+}
+
+/**
  * Create a fresh global block-section regex. Each caller gets its own regex
  * instance so shared `lastIndex` state can never leak between callers.
  */

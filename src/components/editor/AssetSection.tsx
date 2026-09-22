@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { scrollToBlock } from "../../lib/scrollToBlock";
 import { formatBytes } from "../../lib/size";
@@ -116,6 +116,8 @@ export function AssetSection() {
   const clearAssetHighlight = useDocumentStore((s) => s.clearAssetHighlight);
   const doc = useDocumentStore((s) => s.doc);
 
+  const removeFlashTimerRef = useRef<number | null>(null);
+
   const entries = useMemo(() => Object.values(assets), [assets]);
 
   const assetToBlockId = useMemo(() => {
@@ -143,13 +145,26 @@ export function AssetSection() {
     if (!highlightAsset) return;
     let cancelled = false;
     let attempts = 0;
+
+    const clearFlashTimer = () => {
+      if (removeFlashTimerRef.current !== null) {
+        window.clearTimeout(removeFlashTimerRef.current);
+        removeFlashTimerRef.current = null;
+      }
+    };
+
     const tick = () => {
       if (cancelled) return;
       const el = document.getElementById(`asset-${highlightAsset.assetId}`);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Drop any pending removal so a stale timer can't strip a newer flash.
+        clearFlashTimer();
         el.classList.add("asset-flash");
-        setTimeout(() => el.classList.remove("asset-flash"), 1600);
+        removeFlashTimerRef.current = window.setTimeout(() => {
+          el.classList.remove("asset-flash");
+          removeFlashTimerRef.current = null;
+        }, 1600);
         clearAssetHighlight();
         return;
       }
@@ -164,6 +179,7 @@ export function AssetSection() {
     tick();
     return () => {
       cancelled = true;
+      clearFlashTimer();
     };
   }, [highlightAsset, clearAssetHighlight]);
 

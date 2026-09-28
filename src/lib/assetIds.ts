@@ -55,6 +55,20 @@ export function extractLinkedReferenceIds(content: string): string[] {
 }
 
 /**
+ * Extract ids that already have a reference definition line (`[id]: ...`) in
+ * the given markdown — the inverse of extractLinkedReferenceIds. Lets a render
+ * path append only the definitions it actually lacks, instead of guessing from
+ * marker text that user content can also contain.
+ */
+export function extractDefinedReferenceIds(markdown: string): string[] {
+  const ids: string[] = [];
+  const re = new RegExp(`^\\[([^\\]]+)\\]:`, "gm");
+  let m;
+  while ((m = re.exec(markdown)) !== null) ids.push(m[1]);
+  return ids;
+}
+
+/**
  * Map every referenced asset id to the first block that references it, for the
  * asset panels' "jump to block" navigation. Built from block content with
  * extractLinkedReferenceIds — the same source the orphan sweeps use — so both

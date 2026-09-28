@@ -10,7 +10,7 @@ import type {
 } from "../types";
 import { createEmptyDocument, BLOCK_PREFIX, ASSET_PREFIX } from "../constants/defaults";
 import { serializeDocument } from "../lib/markdownSerializer";
-import { sweepPreservedAssetLines } from "../lib/assetIds";
+import { extractLinkedReferenceIds, sweepPreservedAssetLines } from "../lib/assetIds";
 import { saveDocument, loadActiveDocument, getRecentDocuments } from "../lib/storage";
 import { stringByteSize, calculatePortableScore } from "../lib/size";
 import { formatBlockTime } from "../lib/dates";
@@ -165,9 +165,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!doc) return;
     const remainingBlocks = doc.blocks.filter((b) => b.id !== blockId);
 
-    // Clean up orphaned assets: remove assets no longer referenced by any block
+    // Clean up orphaned assets: remove assets no longer referenced by any block.
+    // Ids are derived from the surviving blocks' content with the same extractor
+    // the markdown sync sweep uses, so both deletion paths agree and a stale
+    // block.assetIds (image refs only) can't drop a still-referenced asset.
     const remainingAssetIds = new Set(
-      remainingBlocks.flatMap((b) => b.assetIds)
+      remainingBlocks.flatMap((b) => extractLinkedReferenceIds(b.content))
     );
     const cleanedAssets: Record<string, Asset> = {};
     for (const [id, asset] of Object.entries(doc.assets)) {

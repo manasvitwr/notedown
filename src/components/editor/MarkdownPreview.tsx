@@ -35,6 +35,12 @@ const defaultRender =
     return self.renderToken(tokens, idx, options);
   };
 
+// 1x1 transparent GIF, used when an asset exists but cannot be rendered, so a
+// raw reference id never lands in the DOM as a src (and is never requested as
+// a relative URL).
+const BLANK_IMAGE_SRC =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
 md.renderer.rules.image = function (tokens, idx, options, env, self) {
   const token = tokens[idx];
   const src = token.attrGet("src") ?? "";
@@ -43,7 +49,9 @@ md.renderer.rules.image = function (tokens, idx, options, env, self) {
   const assets = (env as { assets?: Record<string, Asset> } | undefined)?.assets;
   if (assets && src in assets) {
     const uri = dataUri(assets[src]);
-    if (uri) token.attrSet("src", uri);
+    // Neutralize the src when the asset's MIME is outside the allowlist:
+    // rendering the reference id would emit a broken image instead.
+    token.attrSet("src", uri ?? BLANK_IMAGE_SRC);
   }
 
   return defaultRender(tokens, idx, options, env, self);

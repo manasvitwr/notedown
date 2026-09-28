@@ -9,7 +9,7 @@ import { AssetSection } from "./AssetSection";
 import { StatusBar } from "./StatusBar";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { parseNotedownFile, createBlockSectionRegex, stripDataSection } from "../../lib/markdownParser";
-import { extractAssetIds, ASSET_ID_SOURCE } from "../../lib/assetIds";
+import { extractAssetIds, extractLinkedReferenceIds, sweepPreservedAssetLines } from "../../lib/assetIds";
 import { serializeDocument } from "../../lib/markdownSerializer";
 import { processPaste } from "../../lib/clipboard";
 import type { Block, EditorMode } from "../../types";
@@ -29,11 +29,9 @@ function extractFreeTextOutsideBlocks(md: string): string {
   // section is only stripped when the parser would also recognize it as a block
   // (a malformed inline fence is left as free text rather than silently dropped).
   const noBlocks = noFrontmatter.replace(createBlockSectionRegex(), "");
-  // Remove nd:data section
-  const noData = noBlocks.replace(
-    /<!-- nd:data -->[\s\S]*?<!-- nd:enddata -->/g,
-    ""
-  );
+  // Remove nd:data section through the fence-aware helper, so a data marker
+  // living inside a block is treated the same way the editor treats it.
+  const noData = stripDataSection(noBlocks);
   // Strip the leading title line (# ...) emitted by the serializer. Start-of-
   // string only, so a user's own "# heading" inside pasted content is preserved.
   const stripped = noData.replace(/^#\s+.+\n?/, "");
@@ -109,10 +107,12 @@ export function EditorPane() {
         // nd:data section is stripped from the editable value), so preserve
         // them across the round-trip. Keep only assets still referenced by the
         // freshly parsed blocks (mirroring deleteBlock) instead of leaking
-        // orphans. Reference ids are matched with the shared extractAssetIds
-        // helper — the same pattern the parser accepts for definitions.
+        // orphans. References are matched with the shared extractor, which
+        // covers reference-style images and links — the parser preserves any
+        // `[...]:` definition, so an id kept by either reference style must
+        // survive the sweep.
         const referencedAssetIds = new Set(
-          parsed.blocks.flatMap((b) => extractAssetIds(b.content))
+          parsed.blocks.flatMap((b) => extractLinkedReferenceIds(b.content))
         );
         parsed.assets = Object.fromEntries(
           Object.entries(doc.assets).filter(([id]) =>
@@ -121,15 +121,9 @@ export function EditorPane() {
         );
         // Preserved raw data-section lines get the same orphan sweep by their
         // own id, so removing a block that referenced one also prunes it.
-        parsed.preservedAssetLines = (doc.preservedAssetLines ?? []).filter(
-          (line) => {
-            // Same id token shape as extractAssetIds so hyphenated ids like
-            // `my-vid` survive the sweep just like img_ ids do.
-            const id = line.match(
-              new RegExp(`^\\[(${ASSET_ID_SOURCE})\\]:`)
-            )?.[1];
-            return !!id && referencedAssetIds.has(id);
-          }
+        parsed.preservedAssetLines = sweepPreservedAssetLines(
+          doc.preservedAssetLines ?? [],
+          referencedAssetIds
         );
 
         // Preserve the document ID and settings, merge
@@ -247,14 +241,16 @@ export function EditorPane() {
   // so pastes and assets stay in sync instantly in all views. Only the actual
   // block content is rendered: frontmatter, the generated title line, the data
   // section and the generated per-block "## HH:MM · type" headings are removed
-  // so nothing that wasn't written by the user shows up in the preview.
+  // so nothing that wasn't written by the user shows up in the preview. The
+  // data section is removed with the same fence-aware helper the editor uses,
+  // so a marker inside a block isn't stripped out from under the user.
   const previewMarkdown = useMemo(() => {
     if (!doc) return "";
-    return serializeDocument(doc)
-      .replace(/^---\n[\s\S]*?\n---\n*/, "")
-      .replace(/^#\s+.+\n?/, "")
-      .replace(/<!-- nd:data -->[\s\S]*?<!-- nd:enddata -->/g, "")
-      .replace(/^##\s+\d{2}:\d{2}\s+·\s+\S+\s*$/gm, "");
+    return stripDataSection(
+      serializeDocument(doc)
+        .replace(/^---\n[\s\S]*?\n---\n*/, "")
+        .replace(/^#\s+.+\n?/, "")
+    ).replace(/^##\s+\d{2}:\d{2}\s+·\s+\S+\s*$/gm, "");
   }, [doc]);
 
   return (

@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import { createEmptyDocument, BLOCK_PREFIX, ASSET_PREFIX } from "../constants/defaults";
 import { serializeDocument } from "../lib/markdownSerializer";
+import { sweepPreservedAssetLines } from "../lib/assetIds";
 import { saveDocument, loadActiveDocument, getRecentDocuments } from "../lib/storage";
 import { stringByteSize, calculatePortableScore } from "../lib/size";
 import { formatBlockTime } from "../lib/dates";
@@ -179,6 +180,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       ...doc,
       blocks: remainingBlocks,
       assets: cleanedAssets,
+      // Same orphan rule the markdown sync sweep uses, so deleting a block
+      // prunes the preserved data-section lines it referenced in either mode.
+      preservedAssetLines: sweepPreservedAssetLines(
+        doc.preservedAssetLines ?? [],
+        remainingAssetIds
+      ),
       updatedAt: new Date().toISOString(),
     };
     // Defer serialization — recomputed lazily when needed

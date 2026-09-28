@@ -94,7 +94,10 @@ export function parseNotedownFile(
   const preservedAssetLines: string[] = [];
   const dataRegex =
     /<!-- nd:data -->([\s\S]*?)<!-- nd:enddata -->/;
-  const dataMatch = dataRegex.exec(raw);
+  // Drop block sections before looking for the system data section, so a marker
+  // inside a block (pasted notes, code examples) can never be mistaken for it —
+  // the same fence rule stripDataSection applies when removing the section.
+  const dataMatch = dataRegex.exec(raw.replace(createBlockSectionRegex(), ""));
   if (dataMatch) {
     const refRegex = new RegExp(
       `^\\[(${ASSET_ID_SOURCE})\\]:\\s*data:(image\\/(?:webp|jpeg|png));base64,(\\S+)$`

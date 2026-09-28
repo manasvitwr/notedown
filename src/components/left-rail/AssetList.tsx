@@ -3,6 +3,7 @@ import { useDocumentStore } from "../../store/useDocumentStore";
 import { formatBytes } from "../../lib/size";
 import { dataUri, BLANK_IMAGE_SRC } from "../../lib/imageMime";
 import { scrollToBlock } from "../../lib/scrollToBlock";
+import { buildAssetToBlockId } from "../../lib/assetIds";
 
 export function AssetList() {
   const doc = useDocumentStore((s) => s.doc);
@@ -10,16 +11,10 @@ export function AssetList() {
   const entries = Object.values(assets);
 
   // Find which block references each asset
-  const assetToBlockId = useMemo(() => {
-    if (!doc) return {};
-    const map: Record<string, string> = {};
-    for (const block of doc.blocks) {
-      for (const assetId of block.assetIds) {
-        if (!map[assetId]) map[assetId] = block.id;
-      }
-    }
-    return map;
-  }, [doc]);
+  const assetToBlockId = useMemo(
+    () => buildAssetToBlockId(doc?.blocks ?? []),
+    [doc]
+  );
 
   return (
     <div className="px-4 py-3">

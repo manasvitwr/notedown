@@ -1,3 +1,5 @@
+import type { Block } from "../types";
+
 /**
  * Shared id token shape for reference ids. Allows hyphens so imported ids like
  * `my-pic` survive extract, preserve and sweep consistently.
@@ -50,4 +52,22 @@ export function extractLinkedReferenceIds(content: string): string[] {
   let m;
   while ((m = re.exec(content)) !== null) ids.push(m[1]);
   return ids;
+}
+
+/**
+ * Map every referenced asset id to the first block that references it, for the
+ * asset panels' "jump to block" navigation. Built from block content with
+ * extractLinkedReferenceIds — the same source the orphan sweeps use — so both
+ * panels agree, and an asset kept alive by a link reference is navigable just
+ * like an image reference instead of being silently unmapped by the narrower
+ * block.assetIds field.
+ */
+export function buildAssetToBlockId(blocks: Block[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const block of blocks) {
+    for (const id of extractLinkedReferenceIds(block.content)) {
+      if (!map[id]) map[id] = block.id;
+    }
+  }
+  return map;
 }

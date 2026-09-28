@@ -3,6 +3,7 @@ import { useDocumentStore } from "../../store/useDocumentStore";
 import { scrollToBlock } from "../../lib/scrollToBlock";
 import { formatBytes } from "../../lib/size";
 import { dataUri } from "../../lib/imageMime";
+import { buildAssetToBlockId } from "../../lib/assetIds";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { Asset } from "../../types";
 
@@ -137,16 +138,10 @@ export function AssetSection() {
 
   const entries = useMemo(() => Object.values(assets), [assets]);
 
-  const assetToBlockId = useMemo(() => {
-    if (!doc) return {};
-    const map: Record<string, string> = {};
-    for (const block of doc.blocks) {
-      for (const assetId of block.assetIds) {
-        if (!map[assetId]) map[assetId] = block.id;
-      }
-    }
-    return map;
-  }, [doc]);
+  const assetToBlockId = useMemo(
+    () => buildAssetToBlockId(doc?.blocks ?? []),
+    [doc]
+  );
 
   const summary = useMemo(() => {
     const counts: Record<string, number> = {};

@@ -25,3 +25,11 @@ export function dataUri(asset: Pick<Asset, "mime" | "base64">): string | null {
   if (!isAllowedImageMime(asset.mime)) return null;
   return `data:${asset.mime};base64,${asset.base64}`;
 }
+
+/**
+ * 1x1 transparent GIF used wherever an asset exists but cannot be rendered
+ * (non-allowlisted MIME). Shared by every render path so a blocked asset never
+ * falls back to a raw reference id, a relative URL or a src-less img element.
+ */
+export const BLANK_IMAGE_SRC =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";

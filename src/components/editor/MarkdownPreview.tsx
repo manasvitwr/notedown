@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
 import { useDocumentStore } from "../../store/useDocumentStore";
-import { dataUri } from "../../lib/imageMime";
+import { dataUri, BLANK_IMAGE_SRC } from "../../lib/imageMime";
 import type { Asset } from "../../types";
 
 // Initialize markdown-it with highlight.js
@@ -34,12 +34,6 @@ const defaultRender =
   function (tokens, idx, options, _env, self) {
     return self.renderToken(tokens, idx, options);
   };
-
-// 1x1 transparent GIF, used when an asset exists but cannot be rendered, so a
-// raw reference id never lands in the DOM as a src (and is never requested as
-// a relative URL).
-const BLANK_IMAGE_SRC =
-  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
 md.renderer.rules.image = function (tokens, idx, options, env, self) {
   const token = tokens[idx];

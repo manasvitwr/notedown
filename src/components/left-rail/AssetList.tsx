@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { formatBytes } from "../../lib/size";
-import { dataUri } from "../../lib/imageMime";
+import { dataUri, BLANK_IMAGE_SRC } from "../../lib/imageMime";
 import { scrollToBlock } from "../../lib/scrollToBlock";
 
 export function AssetList() {
@@ -47,7 +47,7 @@ export function AssetList() {
               className="w-full flex items-center gap-2 px-2 py-1 rounded-[var(--radius-xs)] hover:bg-bg-hover transition-colors text-left"
             >
               <img
-                src={dataUri(asset) ?? undefined}
+                src={dataUri(asset) ?? BLANK_IMAGE_SRC}
                 alt={asset.alt ?? asset.id}
                 className="w-6 h-6 rounded object-cover border border-border shrink-0"
               />

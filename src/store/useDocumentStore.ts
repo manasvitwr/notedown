@@ -10,6 +10,7 @@ import type {
 } from "../types";
 import { createEmptyDocument, BLOCK_PREFIX, ASSET_PREFIX } from "../constants/defaults";
 import { serializeDocument } from "../lib/markdownSerializer";
+import { extractLinkedReferenceIds, sweepPreservedAssetLines } from "../lib/assetIds";
 import { saveDocument, loadActiveDocument, getRecentDocuments } from "../lib/storage";
 import { stringByteSize, calculatePortableScore } from "../lib/size";
 import { formatBlockTime } from "../lib/dates";
@@ -52,6 +53,13 @@ interface DocumentStore {
 
   // ─── Editor ─────────────────────────────────────────────
   setEditorMode: (mode: EditorMode) => void;
+
+  // ─── Assets Panel UI (not persisted) ────────────────────
+  assetsExpanded: boolean;
+  highlightAsset: { assetId: string; nonce: number } | null;
+  setAssetsExpanded: (open: boolean) => void;
+  requestAssetHighlight: (assetId: string) => void;
+  clearAssetHighlight: () => void;
 
   // ─── Serialization ──────────────────────────────────────
   reserialize: () => void;
@@ -100,6 +108,8 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
   serializedMarkdown: "",
   nextBlockNum: 1,
   nextAssetNum: 1,
+  assetsExpanded: false,
+  highlightAsset: null,
 
   // ─── Document Actions ───────────────────────────────────
 
@@ -155,9 +165,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (!doc) return;
     const remainingBlocks = doc.blocks.filter((b) => b.id !== blockId);
 
-    // Clean up orphaned assets: remove assets no longer referenced by any block
+    // Clean up orphaned assets: remove assets no longer referenced by any block.
+    // Ids are derived from the surviving blocks' content with the same extractor
+    // the markdown sync sweep uses, so both deletion paths agree and a stale
+    // block.assetIds (image refs only) can't drop a still-referenced asset.
     const remainingAssetIds = new Set(
-      remainingBlocks.flatMap((b) => b.assetIds)
+      remainingBlocks.flatMap((b) => extractLinkedReferenceIds(b.content))
     );
     const cleanedAssets: Record<string, Asset> = {};
     for (const [id, asset] of Object.entries(doc.assets)) {
@@ -170,6 +183,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       ...doc,
       blocks: remainingBlocks,
       assets: cleanedAssets,
+      // Same orphan rule the markdown sync sweep uses, so deleting a block
+      // prunes the preserved data-section lines it referenced in either mode.
+      preservedAssetLines: sweepPreservedAssetLines(
+        doc.preservedAssetLines ?? [],
+        remainingAssetIds
+      ),
       updatedAt: new Date().toISOString(),
     };
     // Defer serialization — recomputed lazily when needed
@@ -285,6 +304,25 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     if (mode === "markdown") get().reserialize();
     set({ editorMode: mode });
   },
+
+  // ─── Assets Panel UI (not persisted) ────────────────────
+
+  setAssetsExpanded: (open: boolean) => set({ assetsExpanded: open }),
+
+  requestAssetHighlight: (assetId: string) =>
+    set((state) => {
+      // Only expand/highlight when the asset actually exists — a dangling
+      // reference must not force the panel open or burn a stale highlight.
+      if (!state.doc?.assets[assetId]) {
+        return { highlightAsset: null };
+      }
+      return {
+        assetsExpanded: true,
+        highlightAsset: { assetId, nonce: Date.now() },
+      };
+    }),
+
+  clearAssetHighlight: () => set({ highlightAsset: null }),
 
   // ─── Serialization ──────────────────────────────────────
 

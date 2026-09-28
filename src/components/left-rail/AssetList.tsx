@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { formatBytes } from "../../lib/size";
+import { dataUri, BLANK_IMAGE_SRC } from "../../lib/imageMime";
 import { scrollToBlock } from "../../lib/scrollToBlock";
+import { buildAssetToBlockId } from "../../lib/assetIds";
 
 export function AssetList() {
   const doc = useDocumentStore((s) => s.doc);
@@ -9,16 +11,10 @@ export function AssetList() {
   const entries = Object.values(assets);
 
   // Find which block references each asset
-  const assetToBlockId = useMemo(() => {
-    if (!doc) return {};
-    const map: Record<string, string> = {};
-    for (const block of doc.blocks) {
-      for (const assetId of block.assetIds) {
-        if (!map[assetId]) map[assetId] = block.id;
-      }
-    }
-    return map;
-  }, [doc]);
+  const assetToBlockId = useMemo(
+    () => buildAssetToBlockId(doc?.blocks ?? []),
+    [doc]
+  );
 
   return (
     <div className="px-4 py-3">
@@ -46,7 +42,7 @@ export function AssetList() {
               className="w-full flex items-center gap-2 px-2 py-1 rounded-[var(--radius-xs)] hover:bg-bg-hover transition-colors text-left"
             >
               <img
-                src={`data:${asset.mime};base64,${asset.base64}`}
+                src={dataUri(asset) ?? BLANK_IMAGE_SRC}
                 alt={asset.alt ?? asset.id}
                 className="w-6 h-6 rounded object-cover border border-border shrink-0"
               />

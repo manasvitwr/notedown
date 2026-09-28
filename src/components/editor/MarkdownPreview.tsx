@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
 import { useDocumentStore } from "../../store/useDocumentStore";
+import { dataUri, BLANK_IMAGE_SRC } from "../../lib/imageMime";
+import { extractDefinedReferenceIds } from "../../lib/assetIds";
 import type { Asset } from "../../types";
 
 // Initialize markdown-it with highlight.js
@@ -41,8 +43,10 @@ md.renderer.rules.image = function (tokens, idx, options, env, self) {
   // If src is a reference ID like "img_001", resolve from assets
   const assets = (env as { assets?: Record<string, Asset> } | undefined)?.assets;
   if (assets && src in assets) {
-    const asset = assets[src];
-    token.attrSet("src", `data:${asset.mime};base64,${asset.base64}`);
+    const uri = dataUri(assets[src]);
+    // Neutralize the src when the asset's MIME is outside the allowlist:
+    // rendering the reference id would emit a broken image instead.
+    token.attrSet("src", uri ?? BLANK_IMAGE_SRC);
   }
 
   return defaultRender(tokens, idx, options, env, self);
@@ -61,20 +65,18 @@ export function MarkdownPreview({ markdown }: MarkdownPreviewProps) {
   const processedMarkdown = useMemo(() => {
     if (!doc) return markdown;
 
-    // Append reference definitions so markdown-it can resolve them
-    let result = markdown;
-    const assetEntries = Object.entries(doc.assets);
-    if (assetEntries.length > 0) {
-      const alreadyHasRefs = markdown.includes("<!-- nd:data -->");
-      if (!alreadyHasRefs) {
-        result += "\n\n";
-        for (const [id, asset] of assetEntries) {
-          result += `[${id}]: data:${asset.mime};base64,${asset.base64}\n`;
-        }
-      }
+    // Append the definitions this markdown actually lacks. Marker text is not a
+    // signal: the system nd:data section is stripped before the preview renders,
+    // and a data marker inside a user block would otherwise suppress every real
+    // definition and leave the images unresolved.
+    const defined = new Set(extractDefinedReferenceIds(markdown));
+    let appended = "";
+    for (const [id, asset] of Object.entries(doc.assets)) {
+      if (defined.has(id)) continue;
+      const uri = dataUri(asset);
+      if (uri) appended += `[${id}]: ${uri}\n`;
     }
-
-    return result;
+    return appended ? `${markdown}\n\n${appended}` : markdown;
   }, [markdown, doc]);
 
   const html = useMemo(() => {

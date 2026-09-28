@@ -5,9 +5,11 @@ import { ModeToggle } from "./ModeToggle";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { DataView } from "./DataView";
+import { AssetSection } from "./AssetSection";
 import { StatusBar } from "./StatusBar";
 import { useDocumentStore } from "../../store/useDocumentStore";
-import { parseNotedownFile, createBlockSectionRegex } from "../../lib/markdownParser";
+import { parseNotedownFile, createBlockSectionRegex, stripDataSection } from "../../lib/markdownParser";
+import { extractAssetIds, extractLinkedReferenceIds, sweepPreservedAssetLines } from "../../lib/assetIds";
 import { serializeDocument } from "../../lib/markdownSerializer";
 import { processPaste } from "../../lib/clipboard";
 import type { Block, EditorMode } from "../../types";
@@ -27,11 +29,9 @@ function extractFreeTextOutsideBlocks(md: string): string {
   // section is only stripped when the parser would also recognize it as a block
   // (a malformed inline fence is left as free text rather than silently dropped).
   const noBlocks = noFrontmatter.replace(createBlockSectionRegex(), "");
-  // Remove nd:data section
-  const noData = noBlocks.replace(
-    /<!-- nd:data -->[\s\S]*?<!-- nd:enddata -->/g,
-    ""
-  );
+  // Remove nd:data section through the fence-aware helper, so a data marker
+  // living inside a block is treated the same way the editor treats it.
+  const noData = stripDataSection(noBlocks);
   // Strip the leading title line (# ...) emitted by the serializer. Start-of-
   // string only, so a user's own "# heading" inside pasted content is preserved.
   const stripped = noData.replace(/^#\s+.+\n?/, "");
@@ -97,11 +97,34 @@ export function EditorPane() {
             content: freeText.trim(),
             createdAt: new Date().toISOString(),
             tags: [],
-            assetIds: [],
+            assetIds: extractAssetIds(freeText.trim()),
             source: "edit",
           };
           parsed.blocks.push(newBlock);
         }
+
+        // Assets are system-managed and never edited in the textarea (the
+        // nd:data section is stripped from the editable value), so preserve
+        // them across the round-trip. Keep only assets still referenced by the
+        // freshly parsed blocks (mirroring deleteBlock) instead of leaking
+        // orphans. References are matched with the shared extractor, which
+        // covers reference-style images and links — the parser preserves any
+        // `[...]:` definition, so an id kept by either reference style must
+        // survive the sweep.
+        const referencedAssetIds = new Set(
+          parsed.blocks.flatMap((b) => extractLinkedReferenceIds(b.content))
+        );
+        parsed.assets = Object.fromEntries(
+          Object.entries(doc.assets).filter(([id]) =>
+            referencedAssetIds.has(id)
+          )
+        );
+        // Preserved raw data-section lines get the same orphan sweep by their
+        // own id, so removing a block that referenced one also prunes it.
+        parsed.preservedAssetLines = sweepPreservedAssetLines(
+          doc.preservedAssetLines ?? [],
+          referencedAssetIds
+        );
 
         // Preserve the document ID and settings, merge
         setDocument({
@@ -167,7 +190,7 @@ export function EditorPane() {
         if (blocks.length > 0) {
           appendBlocks(blocks, assets);
           reserialize();
-          setDraft(useDocumentStore.getState().serializedMarkdown);
+          setDraft(stripDataSection(useDocumentStore.getState().serializedMarkdown));
         }
       } catch (err) {
         console.error("Paste processing failed:", err);
@@ -187,7 +210,7 @@ export function EditorPane() {
     (mode: EditorMode) => {
       if (mode === "markdown" && editorMode !== "markdown") {
         reserialize();
-        setDraft(useDocumentStore.getState().serializedMarkdown);
+        setDraft(stripDataSection(useDocumentStore.getState().serializedMarkdown));
       } else if (editorMode === "markdown" && mode !== "markdown") {
         flushPendingSync();
         setDraft(null);
@@ -211,21 +234,23 @@ export function EditorPane() {
   useEffect(() => {
     if (editorMode !== "markdown") return;
     if (pendingSyncRef.current !== null) return;
-    setDraft(serializedMarkdown);
+    setDraft(stripDataSection(serializedMarkdown));
   }, [editorMode, serializedMarkdown]);
 
   // Compute display markdown fresh from the live store (never the stale cache)
   // so pastes and assets stay in sync instantly in all views. Only the actual
   // block content is rendered: frontmatter, the generated title line, the data
   // section and the generated per-block "## HH:MM · type" headings are removed
-  // so nothing that wasn't written by the user shows up in the preview.
+  // so nothing that wasn't written by the user shows up in the preview. The
+  // data section is removed with the same fence-aware helper the editor uses,
+  // so a marker inside a block isn't stripped out from under the user.
   const previewMarkdown = useMemo(() => {
     if (!doc) return "";
-    return serializeDocument(doc)
-      .replace(/^---\n[\s\S]*?\n---\n*/, "")
-      .replace(/^#\s+.+\n?/, "")
-      .replace(/<!-- nd:data -->[\s\S]*?<!-- nd:enddata -->/g, "")
-      .replace(/^##\s+\d{2}:\d{2}\s+·\s+\S+\s*$/gm, "");
+    return stripDataSection(
+      serializeDocument(doc)
+        .replace(/^---\n[\s\S]*?\n---\n*/, "")
+        .replace(/^#\s+.+\n?/, "")
+    ).replace(/^##\s+\d{2}:\d{2}\s+·\s+\S+\s*$/gm, "");
   }, [doc]);
 
   return (
@@ -238,13 +263,18 @@ export function EditorPane() {
       {/* Editor / Preview / Data */}
       <div className="flex-1 overflow-hidden">
         {editorMode === "markdown" && (
-          <MarkdownEditor
-            value={draft ?? serializedMarkdown}
-            onChange={handleMarkdownChange}
-            onPaste={handleMarkdownPaste}
-            onBlur={handleMarkdownBlur}
-            editorRef={markdownEditorRef}
-          />
+          <div className="flex flex-col h-full overflow-hidden">
+            <div className="flex-1 overflow-hidden min-h-0">
+              <MarkdownEditor
+                value={draft ?? stripDataSection(serializedMarkdown)}
+                onChange={handleMarkdownChange}
+                onPaste={handleMarkdownPaste}
+                onBlur={handleMarkdownBlur}
+                editorRef={markdownEditorRef}
+              />
+            </div>
+            <AssetSection />
+          </div>
         )}
         {editorMode === "preview" && (
           <MarkdownPreview markdown={previewMarkdown} />

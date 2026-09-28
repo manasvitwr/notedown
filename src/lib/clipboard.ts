@@ -1,6 +1,7 @@
 import type { Block, Asset, DocumentState } from "../types";
 import { classifyText } from "./blockClassifier";
 import { compressImage } from "./imageCompression";
+import { isAllowedImageMime } from "./imageMime";
 
 export interface PasteResult {
   blocks: Block[];
@@ -51,36 +52,38 @@ export async function processPaste(
       blocks.push(block);
     } catch (err) {
       console.error("Image compression failed:", err);
-      // Fallback: try to read raw base64
-      try {
-        const raw = await fileToBase64(file);
-        const fallbackAsset: Asset = {
-          id: assetId,
-          kind: "image",
-          mime: file.type as Asset["mime"],
-          base64: raw,
-          width: 0,
-          height: 0,
-          sizeBytes: file.size,
-          originalSizeBytes: file.size,
-          createdAt: now,
-          alt: "screenshot",
-        };
-        assets.push(fallbackAsset);
+      // Fallback: try to read raw base64 — only for allowlisted MIME types.
+      if (isAllowedImageMime(file.type)) {
+        try {
+          const raw = await fileToBase64(file);
+          const fallbackAsset: Asset = {
+            id: assetId,
+            kind: "image",
+            mime: file.type,
+            base64: raw,
+            width: 0,
+            height: 0,
+            sizeBytes: file.size,
+            originalSizeBytes: file.size,
+            createdAt: now,
+            alt: "screenshot",
+          };
+          assets.push(fallbackAsset);
 
-        const blockId = allocator.allocateBlockId();
-        const block: Block = {
-          id: blockId,
-          type: "image",
-          content: `![screenshot][${fallbackAsset.id}]`,
-          createdAt: now,
-          tags: [],
-          assetIds: [fallbackAsset.id],
-          source: "clipboard",
-        };
-        blocks.push(block);
-      } catch {
-        console.error("Fallback image read also failed");
+          const blockId = allocator.allocateBlockId();
+          const block: Block = {
+            id: blockId,
+            type: "image",
+            content: `![screenshot][${fallbackAsset.id}]`,
+            createdAt: now,
+            tags: [],
+            assetIds: [fallbackAsset.id],
+            source: "clipboard",
+          };
+          blocks.push(block);
+        } catch {
+          console.error("Fallback image read also failed");
+        }
       }
     }
   }

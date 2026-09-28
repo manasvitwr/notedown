@@ -44,13 +44,46 @@ export async function importFile(file: File): Promise<ImportResult> {
 }
 
 /**
+ * Extensions the import picker offers. Anything the classifier can name is
+ * worth importing: the extension is real context, and a file the user chose
+ * deliberately is classified from its content *and* its name.
+ */
+const IMPORT_EXTENSIONS = [
+  ".md",
+  ".markdown",
+  ".txt",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".js",
+  ".mjs",
+  ".ts",
+  ".tsx",
+  ".jsx",
+  ".py",
+  ".sql",
+  ".sh",
+  ".bash",
+  ".css",
+  ".html",
+  ".htm",
+  ".xml",
+  ".svg",
+];
+
+/**
  * Open a file picker and return the selected file.
  */
 export function openFilePicker(): Promise<File | null> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".md,.markdown,.txt,text/markdown,text/plain";
+    input.accept = [
+      ...IMPORT_EXTENSIONS,
+      "text/markdown",
+      "text/plain",
+      "application/json",
+    ].join(",");
     input.onchange = () => {
       resolve(input.files?.[0] ?? null);
     };

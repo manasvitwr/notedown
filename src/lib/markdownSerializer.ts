@@ -1,4 +1,4 @@
-import type { DocumentState } from "../types";
+import type { Block, DocumentState } from "../types";
 import { formatBlockTime } from "./dates";
 import { NOTEDOWN_VERSION } from "../constants/defaults";
 
@@ -30,7 +30,7 @@ export function serializeDocument(doc: DocumentState): string {
     const typeLabel = block.type === "image" ? "screenshot" : block.type;
 
     parts.push(
-      `<!-- nd:block ${block.id} ${block.type} ${block.createdAt}${block.collapsed ? " collapsed" : ""} -->`
+      `<!-- nd:block ${block.id} ${block.type} ${block.createdAt}${block.collapsed ? " collapsed" : ""}${serializeClassification(block)} -->`
     );
     parts.push(`## ${time} · ${typeLabel}`);
     parts.push("");
@@ -62,4 +62,26 @@ export function serializeDocument(doc: DocumentState): string {
 
 function escapeYaml(str: string): string {
   return str.replace(/"/g, '\\"');
+}
+
+/**
+ * Serialize classification metadata into the block marker's trailing
+ * attributes, e.g. `lang=python src=user conf=1.00 cand=javascript,typescript`.
+ *
+ * Written as plain `key=value` pairs inside the existing HTML comment, so an
+ * older Notedown (or any other markdown reader) still sees a valid comment and
+ * a newer one can read the metadata back. Nothing here is required for the
+ * document to make sense — a block with no metadata is simply unclassified.
+ */
+function serializeClassification(block: Block): string {
+  const classification = block.classification;
+  if (!classification) return "";
+  const attrs: string[] = [];
+  if (classification.language) attrs.push(`lang=${classification.language}`);
+  attrs.push(`src=${classification.source}`);
+  attrs.push(`conf=${classification.confidence.toFixed(2)}`);
+  if (classification.candidates && classification.candidates.length > 0) {
+    attrs.push(`cand=${classification.candidates.join(",")}`);
+  }
+  return attrs.length > 0 ? ` ${attrs.join(" ")}` : "";
 }

@@ -1,5 +1,5 @@
 import type { Block, Asset, DocumentState } from "../types";
-import { classifyText } from "./blockClassifier";
+import { classifyCapture, formatCaptureContent, toBlockClassification } from "./classification";
 import { compressImage } from "./imageCompression";
 import { isAllowedImageMime } from "./imageMime";
 
@@ -33,24 +33,28 @@ export async function processPaste(
     const file = item.getAsFile();
     if (!file) continue;
 
-    const assetId = allocator.allocateAssetId();
+      const assetId = allocator.allocateAssetId();
 
-    try {
-      const { asset } = await compressImage(file, assetId, doc.settings);
-      assets.push(asset);
+      try {
+        const { asset } = await compressImage(file, assetId, doc.settings);
+        assets.push(asset);
 
-      const blockId = allocator.allocateBlockId();
-      const block: Block = {
-        id: blockId,
-        type: "image",
-        content: `![${asset.alt ?? "screenshot"}][${asset.id}]`,
-        createdAt: now,
-        tags: [],
-        assetIds: [asset.id],
-        source: "clipboard",
-      };
-      blocks.push(block);
-    } catch (err) {
+        const blockId = allocator.allocateBlockId();
+        const block: Block = {
+          id: blockId,
+          type: "image",
+          content: `![${asset.alt ?? "screenshot"}][${asset.id}]`,
+          createdAt: now,
+          tags: [],
+          assetIds: [asset.id],
+          source: "clipboard",
+          // An asset-backed capture is an image by construction; the classifier
+          // has no say in that, but the metadata is recorded so the badge and
+          // the persisted marker agree with the block type.
+          classification: { source: "automatic", confidence: 1 },
+        };
+        blocks.push(block);
+      } catch (err) {
       console.error("Image compression failed:", err);
       // Fallback: try to read raw base64 — only for allowlisted MIME types.
       if (isAllowedImageMime(file.type)) {
@@ -79,6 +83,7 @@ export async function processPaste(
             tags: [],
             assetIds: [fallbackAsset.id],
             source: "clipboard",
+            classification: { source: "automatic", confidence: 1 },
           };
           blocks.push(block);
         } catch {
@@ -102,16 +107,20 @@ export async function processPaste(
       continue;
     }
 
-    const classified = classifyText(text);
+    // Classify once, then reuse the verdict for both the stored type and the
+    // stored markdown, so the badge and the content can never disagree.
+    const result = classifyCapture(text, { source: "clipboard" });
+    const classification = toBlockClassification(result);
     const blockId = allocator.allocateBlockId();
     const block: Block = {
       id: blockId,
-      type: classified.type,
-      content: classified.formattedContent,
+      type: result.blockType,
+      content: formatCaptureContent(result, text),
       createdAt: now,
       tags: [],
       assetIds: [],
       source: "clipboard",
+      ...(classification ? { classification } : {}),
     };
     blocks.push(block);
   }

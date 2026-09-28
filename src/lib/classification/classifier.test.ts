@@ -1,0 +1,213 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { classifyCapture, explainClassification } from "./classifier";
+import { clearClassificationCache } from "./hash";
+import type { ClassificationResult } from "./types";
+
+const PROSE =
+  "The team met on Tuesday to review the roadmap and decided to ship the new editor next week.";
+
+const JSON_SAMPLE = `{
+  "name": "notedown",
+  "version": 1,
+  "nested": { "flags": [true, false] }
+}`;
+
+const PYTHON_SAMPLE = `def add(a, b):
+    return a + b
+`;
+
+const JAVASCRIPT_SAMPLE = `function greet(name) {
+  return \`Hello, \${name}!\`;
+}
+
+console.log(greet("world"));
+`;
+
+const TYPESCRIPT_SAMPLE = `interface User {
+  id: number;
+  name: string;
+}
+`;
+
+const SQL_SAMPLE = `SELECT id, name
+FROM users
+WHERE age > 21
+ORDER BY name;`;
+
+const HTML_SAMPLE = `<!DOCTYPE html>
+<html lang="en">
+  <head><title>Hi</title></head>
+  <body><p>Hello</p></body>
+</html>`;
+
+const CSS_SAMPLE = `.button {
+  color: red;
+  padding: 8px;
+  border: none;
+}
+`;
+
+const BASH_SAMPLE = `#!/bin/bash
+npm install
+git commit -m "wip"`;
+
+const YAML_SAMPLE = `name: notedown
+version: 1
+scripts:
+  build: tsc -b
+  test: vitest run`;
+
+/** One TS-only marker in otherwise plain JavaScript: deliberately undecided. */
+const JS_TS_AMBIGUOUS = `const rows = [];
+let total: number = 0;
+function add(row) {
+  total += row.amount;
+  return total;
+}`;
+
+function expectCode(result: ClassificationResult, language?: string): void {
+  expect(result.type).toBe("code");
+  if (language) expect(result.language).toBe(language);
+  // Below-threshold results are always reported with a confidence we can
+  // explain, and never with an invented language.
+  if (result.confidence < 0.85) expect(result.language).toBeUndefined();
+}
+
+describe("classifyCapture", () => {
+  beforeEach(() => {
+    clearClassificationCache();
+  });
+
+  it("1. ordinary prose stays text", () => {
+    const result = classifyCapture(PROSE);
+    expect(result.type).toBe("text");
+    expect(result.language).toBeUndefined();
+    expect(result.confidence).toBeGreaterThan(0.55);
+  });
+
+  it("2. prose containing the word import is not Python", () => {
+    const result = classifyCapture("importantly, this approach works");
+    expect(result.type).toBe("text");
+    expect(result.language).toBeUndefined();
+  });
+
+  it("3. valid JSON is code/json with very high confidence", () => {
+    const result = classifyCapture(JSON_SAMPLE);
+    expectCode(result, "json");
+    expect(result.confidence).toBeGreaterThanOrEqual(0.95);
+    expect(result.signals.some((s) => s.kind === "json.parse-ok")).toBe(true);
+  });
+
+  it("4. invalid JSON-looking prose is not classified as JSON", () => {
+    const result = classifyCapture("{ this is not json }");
+    expect(result.language).not.toBe("json");
+    expect(result.type).toBe("text");
+  });
+
+  it("5. a python function is code/python", () => {
+    expectCode(classifyCapture(PYTHON_SAMPLE), "python");
+  });
+
+  it("6. a javascript function is code/javascript", () => {
+    expectCode(classifyCapture(JAVASCRIPT_SAMPLE), "javascript");
+  });
+
+  it("7. a typescript interface is code/typescript", () => {
+    expectCode(classifyCapture(TYPESCRIPT_SAMPLE), "typescript");
+  });
+
+  it("8. a SELECT query is code/sql", () => {
+    expectCode(classifyCapture(SQL_SAMPLE), "sql");
+  });
+
+  it("9. an html document is code/html", () => {
+    expectCode(classifyCapture(HTML_SAMPLE), "html");
+  });
+
+  it("10. a css stylesheet is code/css", () => {
+    expectCode(classifyCapture(CSS_SAMPLE), "css");
+  });
+
+  it("11. a shell script is code/bash", () => {
+    expectCode(classifyCapture(BASH_SAMPLE), "bash");
+  });
+
+  it("12. a yaml config is code/yaml", () => {
+    expectCode(classifyCapture(YAML_SAMPLE), "yaml");
+  });
+
+  it("13. a plain URL is a link", () => {
+    const result = classifyCapture("https://example.com");
+    expect(result.type).toBe("link");
+    expect(result.language).toBeUndefined();
+  });
+
+  it("14. a markdown link is a link", () => {
+    const result = classifyCapture("[www.example.com](http://www.example.com)");
+    expect(result.type).toBe("link");
+  });
+
+  it("15. image metadata classifies as image without language detection", () => {
+    const result = classifyCapture("screenshot bytes", {
+      mimeType: "image/png",
+      assetIds: ["img_001"],
+    });
+    expect(result.type).toBe("image");
+    expect(result.language).toBeUndefined();
+    expect(result.signals.every((s) => s.kind.startsWith("image."))).toBe(true);
+  });
+
+  it("16. an ambiguous snippet falls back to text", () => {
+    const result = classifyCapture("a = 1\nb = 2\nc = a + b");
+    expect(result.type).toBe("text");
+    expect(result.language).toBeUndefined();
+  });
+
+  it("17. javascript/typescript ambiguity yields code without a language", () => {
+    const result = classifyCapture(JS_TS_AMBIGUOUS);
+    expect(result.type).toBe("code");
+    expect(result.language).toBeUndefined();
+    expect(result.candidates).toEqual(
+      expect.arrayContaining(["javascript", "typescript"])
+    );
+    expect(result.confidence).toBeLessThan(0.85);
+  });
+
+  it("never names a language below the language threshold", () => {
+    const samples = [
+      "a = 1\nb = 2\nc = a + b",
+      "x = 5",
+      "for (let i = 0; i < 3; i++) {\n  total += i;\n}",
+      "<?php echo 1; ?>",
+    ];
+    for (const sample of samples) {
+      const result = classifyCapture(sample);
+      if (result.confidence < 0.85) {
+        expect(result.language, explainClassification(result)).toBeUndefined();
+      }
+    }
+  });
+
+  it("runs language detection only for code candidates", () => {
+    const proseSignals = classifyCapture(PROSE).signals;
+    expect(proseSignals.some((s) => s.layer === 3)).toBe(false);
+    const codeSignals = classifyCapture(PYTHON_SAMPLE).signals;
+    expect(codeSignals.some((s) => s.layer === 3 || s.layer === 2)).toBe(true);
+  });
+
+  it("explains itself for debugging", () => {
+    const explanation = explainClassification(classifyCapture(JSON_SAMPLE));
+    expect(explanation).toContain("code (json)");
+    expect(explanation).toContain("json.parse-ok");
+  });
+
+  it("memoizes by content + context", () => {
+    const first = classifyCapture(PYTHON_SAMPLE);
+    const second = classifyCapture(PYTHON_SAMPLE);
+    expect(second).toBe(first);
+    // Same content, different context: different answer, so not the same entry.
+    const asImport = classifyCapture(PYTHON_SAMPLE, { source: "import" });
+    expect(asImport).not.toBe(first);
+    expect(asImport.type).toBe("code");
+  });
+});

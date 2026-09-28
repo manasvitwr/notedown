@@ -1,4 +1,7 @@
 import type { Asset, Block, BlockType, DocumentState, ImageMime, StorageMode } from "../types";
+import type { BlockClassification, CodeLanguage } from "./classification/types";
+import { CODE_LANGUAGES } from "./classification/types";
+import { classifyCapture, formatCaptureContent, toBlockClassification } from "./classification";
 import { DEFAULT_SETTINGS } from "../constants/defaults";
 import { nanoid } from "nanoid";
 import { extractAssetIds, ASSET_ID_SOURCE } from "./assetIds";
@@ -11,9 +14,13 @@ import { extractAssetIds, ASSET_ID_SOURCE } from "./assetIds";
  * emits). A malformed/inline fence therefore is NOT treated as a block here,
  * which keeps the editor from silently deleting it during a markdown<->preview
  * mode switch.
+ *
+ * The optional trailing attribute group carries classification metadata
+ * (`lang=python src=user conf=1.00`). It is optional, so v1 files without it
+ * parse exactly as before.
  */
 const BLOCK_SECTION_SOURCE =
-  "<!-- nd:block (\\S+) (\\S+) (\\S+)(?: collapsed)? -->\\n([\\s\\S]*?)<!-- nd:endblock \\1 -->";
+  "<!-- nd:block (\\S+) (\\S+) (\\S+)((?: \\S+)*) -->\\n([\\s\\S]*?)<!-- nd:endblock \\1 -->";
 
 /**
  * Remove the system-managed nd:data asset section from a raw .nd.md string.
@@ -67,13 +74,14 @@ export function parseNotedownFile(
   const blocks: Block[] = [];
   let match;
   while ((match = blockRegex.exec(contentAfterFrontmatter)) !== null) {
-    const [, id, type, createdAt, rawContent] = match;
+    const [, id, type, createdAt, rawAttrs, rawContent] = match;
     // Check the original text for the collapsed marker
     const blockStart = match.index;
     const blockMarkerEnd = contentAfterFrontmatter.indexOf("-->", blockStart);
     const blockMarker = contentAfterFrontmatter.slice(blockStart, blockMarkerEnd + 3);
-    const isCollapsed = blockMarker.includes("collapsed");
+    const isCollapsed = blockMarker.includes(" collapsed");
     const content = stripBlockHeading(rawContent.trim());
+    const classification = parseClassification(rawAttrs);
     blocks.push({
       id,
       type: type as BlockType,
@@ -83,6 +91,7 @@ export function parseNotedownFile(
       assetIds: extractAssetIds(content),
       source: "import",
       collapsed: isCollapsed || undefined,
+      ...(classification ? { classification } : {}),
     });
   }
 
@@ -147,14 +156,21 @@ export function parseNotedownFile(
 }
 
 /**
- * Fallback: import a plain .md file as a single text block.
+ * Fallback: import a plain .md/.txt/.py/.json… file as a single block.
+ *
+ * The filename is real context here — the user chose to import `main.py` — so
+ * it is passed to the classifier, which trusts the extension over the content
+ * after the content-based recognizers have had their say.
  */
 export function createPlainImport(
   raw: string,
   filename: string
 ): DocumentState {
-  const title = filename.replace(/\.md$/, "");
+  const title = filename.replace(/\.[^.]+$/, "");
   const now = new Date().toISOString();
+
+  const result = classifyCapture(raw, { source: "import", filename });
+  const classification = toBlockClassification(result);
 
   return {
     id: nanoid(),
@@ -165,12 +181,13 @@ export function createPlainImport(
     blocks: [
       {
         id: "b_001",
-        type: "text",
-        content: raw,
+        type: result.blockType,
+        content: formatCaptureContent(result, raw),
         createdAt: now,
         tags: [],
         assetIds: [],
         source: "import",
+        ...(classification ? { classification } : {}),
       },
     ],
     assets: {},
@@ -179,6 +196,58 @@ export function createPlainImport(
 }
 
 // ─── Helpers ──────────────────────────────────────────────────
+
+/**
+ * Read the optional classification attributes out of a block marker, e.g.
+ * ` collapsed lang=python src=user conf=1.00 cand=javascript,typescript`.
+ *
+ * Every value is validated: an unknown language, a non-numeric confidence or a
+ * garbage attribute is dropped rather than stored. A marker with no
+ * classification attributes (every v1 document) yields `undefined`, which keeps
+ * legacy blocks honestly unclassified instead of guessing retroactively.
+ */
+function parseClassification(rawAttrs: string): BlockClassification | undefined {
+  const attrs = new Map<string, string>();
+  for (const token of (rawAttrs ?? "").trim().split(/\s+/)) {
+    const eq = token.indexOf("=");
+    if (eq <= 0) continue;
+    attrs.set(token.slice(0, eq), token.slice(eq + 1));
+  }
+
+  const classification: BlockClassification = {
+    source: attrs.get("src") === "user" ? "user" : "automatic",
+    confidence: 0,
+  };
+
+  let found = false;
+  const language = attrs.get("lang");
+  if (language && (CODE_LANGUAGES as readonly string[]).includes(language)) {
+    classification.language = language as CodeLanguage;
+    found = true;
+  }
+  const rawConfidence = attrs.get("conf");
+  if (rawConfidence !== undefined) {
+    const parsed = Number.parseFloat(rawConfidence);
+    if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) {
+      classification.confidence = parsed;
+      found = true;
+    }
+  }
+  if (attrs.get("src") !== undefined) found = true;
+  const rawCandidates = attrs.get("cand");
+  if (rawCandidates) {
+    const candidates = rawCandidates
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => (CODE_LANGUAGES as readonly string[]).includes(entry));
+    if (candidates.length > 0) {
+      classification.candidates = candidates;
+      found = true;
+    }
+  }
+
+  return found ? classification : undefined;
+}
 
 interface Frontmatter {
   notedown?: number;

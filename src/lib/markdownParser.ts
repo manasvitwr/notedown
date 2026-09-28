@@ -1,7 +1,7 @@
 import type { Asset, Block, BlockType, DocumentState, ImageMime, StorageMode } from "../types";
 import { DEFAULT_SETTINGS } from "../constants/defaults";
 import { nanoid } from "nanoid";
-import { extractAssetIds } from "./assetIds";
+import { extractAssetIds, ASSET_ID_SOURCE } from "./assetIds";
 
 /**
  * Source for the block-section regex, shared with the editor so parsing and
@@ -96,8 +96,9 @@ export function parseNotedownFile(
     /<!-- nd:data -->([\s\S]*?)<!-- nd:enddata -->/;
   const dataMatch = dataRegex.exec(raw);
   if (dataMatch) {
-    const refRegex =
-      /^\[(\w+)\]:\s*data:(image\/(?:webp|jpeg|png));base64,(\S+)$/;
+    const refRegex = new RegExp(
+      `^\\[(${ASSET_ID_SOURCE})\\]:\\s*data:(image\\/(?:webp|jpeg|png));base64,(\\S+)$`
+    );
     // Match any reference definition line, with or without whitespace after the
     // colon, so non-allowlisted entries are preserved verbatim.
     const anyRefLineRegex = /^\[[^\]]+\]:\s*\S.*$/;

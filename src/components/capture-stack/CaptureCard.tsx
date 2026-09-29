@@ -4,6 +4,7 @@ import { useDocumentStore } from "../../store/useDocumentStore";
 import { scrollToBlock } from "../../lib/scrollToBlock";
 import { dataUri } from "../../lib/imageMime";
 import { BlockClassificationMenu } from "./BlockClassificationMenu";
+import { ClassificationInspector } from "./ClassificationInspector";
 import { languageLabel } from "../../lib/classification";
 import { FileText, Link, Code, Mic, Image, Layers, ChevronUp, ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
 import type { BlockType } from "../../types";
@@ -128,6 +129,9 @@ export function CaptureCard({ block, displayIndex, isDragging, isDimmed }: Captu
             {preview}
           </div>
         )}
+
+        {/* Dev-only evidence trail (stripped from production builds) */}
+        <ClassificationInspector block={block} />
 
         {/* Footer: badge + time + controls */}
         <div className="flex items-center justify-between">

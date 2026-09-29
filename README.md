@@ -67,7 +67,7 @@ image data is stored at the bottom of the file as markdown reference definitions
 
 ```markdown
 ---
-notedown: 1
+notedown: 2
 title: "compiler research dump"
 created: "2026-08-21T02:40:00+05:30"
 updated: "2026-08-21T02:45:00+05:30"
@@ -78,7 +78,7 @@ image_quality: 0.72
 
 # compiler research dump
 
-<!-- nd:block b_001 code 2026-08-21T02:41:00+05:30 -->
+<!-- nd:block b_001 code 2026-08-21T02:41:00+05:30 lang=typescript src=automatic conf=0.98 -->
 ## 02:41 · code
 
 ```typescript
@@ -89,7 +89,7 @@ function parseToken(input: string): Token {
 
 <!-- nd:endblock b_001 -->
 
-<!-- nd:block b_002 image 2026-08-21T02:42:00+05:30 -->
+<!-- nd:block b_002 image 2026-08-21T02:42:00+05:30 src=automatic conf=1.00 -->
 ## 02:42 · screenshot
 
 ![screenshot][img_001]
@@ -104,6 +104,21 @@ function parseToken(input: string): Token {
 ```
 
 > **Note on Compatibility**: If you open an `.nd.md` file in any generic markdown editor, the body text and images render seamlessly. The HTML block comments are ignored by standard parsers.
+
+### block marker attributes
+
+Block markers accept optional trailing `key=value` attributes (format `notedown: 2`):
+
+| attribute | meaning |
+| --- | --- |
+| `lang=<language>` | the language the classifier named, only above the language threshold |
+| `src=automatic` / `src=user` | who owns the classification; `user` overrides are never overwritten |
+| `conf=0.00..1.00` | confidence in the stored type and language |
+| `cand=<a,b>` | competing languages when the classifier refused to name one |
+
+A missing `lang=` means "code, language unknown" — never a guess. Files written by version 1 simply have no attributes and load unchanged; the attributes are additions, not a migration.
+
+Captures are classified locally in five layers (context → structure → deterministic recognizers → `highlight.js` → weighted scoring). Language is metadata, never a new block type, and everything runs on-device with no network calls.
 
 ---
 

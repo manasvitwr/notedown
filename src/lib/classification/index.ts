@@ -5,6 +5,7 @@
 export { classifyCapture, explainClassification } from "./classifier";
 export { prepareContent, type PreparedContent } from "./content";
 export { clearClassificationCache, classificationKey } from "./hash";
+export { confidenceBand } from "./score";
 export {
   captureTypeOf,
   describeBlockClassification,

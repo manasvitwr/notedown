@@ -84,11 +84,12 @@ export function EditorPane() {
             block.source = existing.source;
             block.tags = existing.tags;
             block.updatedAt = existing.updatedAt;
-            // Classification normally survives in the marker. If a raw edit
-            // dropped the marker, keep the known verdict rather than
-            // reclassifying on the fly — editing text is not a reclassification
-            // request, and a user override must never be silently downgraded.
-            if (!block.classification && existing.classification) {
+            // A user override must never be silently downgraded, so a marker
+            // that lost its attributes during a raw edit is restored from the
+            // store. An automatic verdict is deliberately NOT restored: the
+            // classifier owns those, and re-deriving one is cheap — carrying a
+            // stale copy here would give it a second owner.
+            if (!block.classification && existing.classification?.source === "user") {
               block.classification = existing.classification;
             }
           }

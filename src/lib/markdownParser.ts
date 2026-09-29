@@ -2,6 +2,7 @@ import type { Asset, Block, BlockType, DocumentState, ImageMime, StorageMode } f
 import type { BlockClassification, CodeLanguage } from "./classification/types";
 import { CODE_LANGUAGES } from "./classification/types";
 import { classifyCapture, formatCaptureContent, toBlockClassification } from "./classification";
+import { MIN_CONFIDENCE } from "./classification/config";
 import { DEFAULT_SETTINGS } from "../constants/defaults";
 import { nanoid } from "nanoid";
 import { extractAssetIds, ASSET_ID_SOURCE } from "./assetIds";
@@ -205,6 +206,11 @@ export function createPlainImport(
  * garbage attribute is dropped rather than stored. A marker with no
  * classification attributes (every v1 document) yields `undefined`, which keeps
  * legacy blocks honestly unclassified instead of guessing retroactively.
+ *
+ * The confidence floor is the same `MIN_CONFIDENCE` the writer applies, so
+ * being classified has exactly one owner: the classifier (or a user override).
+ * A hand-edited or truncated marker cannot smuggle in a sub-threshold verdict
+ * that no classifier would ever produce.
  */
 function parseClassification(rawAttrs: string): BlockClassification | undefined {
   const attrs = new Map<string, string>();
@@ -214,26 +220,24 @@ function parseClassification(rawAttrs: string): BlockClassification | undefined 
     attrs.set(token.slice(0, eq), token.slice(eq + 1));
   }
 
+  const rawConfidence = attrs.get("conf");
+  const confidence =
+    rawConfidence === undefined ? NaN : Number.parseFloat(rawConfidence);
+  if (!Number.isFinite(confidence) || confidence < MIN_CONFIDENCE) {
+    // No usable confidence means no classification — not a classification with
+    // confidence 0, which would be a state nothing can ever produce.
+    return undefined;
+  }
+
   const classification: BlockClassification = {
     source: attrs.get("src") === "user" ? "user" : "automatic",
-    confidence: 0,
+    confidence,
   };
 
-  let found = false;
   const language = attrs.get("lang");
   if (language && (CODE_LANGUAGES as readonly string[]).includes(language)) {
     classification.language = language as CodeLanguage;
-    found = true;
   }
-  const rawConfidence = attrs.get("conf");
-  if (rawConfidence !== undefined) {
-    const parsed = Number.parseFloat(rawConfidence);
-    if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) {
-      classification.confidence = parsed;
-      found = true;
-    }
-  }
-  if (attrs.get("src") !== undefined) found = true;
   const rawCandidates = attrs.get("cand");
   if (rawCandidates) {
     const candidates = rawCandidates
@@ -242,11 +246,10 @@ function parseClassification(rawAttrs: string): BlockClassification | undefined 
       .filter((entry) => (CODE_LANGUAGES as readonly string[]).includes(entry));
     if (candidates.length > 0) {
       classification.candidates = candidates;
-      found = true;
     }
   }
 
-  return found ? classification : undefined;
+  return classification;
 }
 
 interface Frontmatter {

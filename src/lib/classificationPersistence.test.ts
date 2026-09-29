@@ -146,33 +146,53 @@ describe("classification persistence", () => {
     expect(parsed.blocks[1].collapsed).toBe(true);
   });
 
-  it("drops invalid classification values instead of storing them", () => {
-    const broken = [
-      "---",
-      "notedown: 2",
-      'title: "Broken"',
-      'created: "2026-01-01T00:00:00.000Z"',
-      'updated: "2026-01-01T00:00:00.000Z"',
-      'storage: "inline"',
-      "image_max_width: 1200",
-      "image_quality: 0.72",
-      "---",
-      "",
-      "# Broken",
-      "",
-      "<!-- nd:block b_001 code 2026-01-01T00:00:00.000Z lang=cobol conf=abc src=hacker -->",
-      "body",
-      "<!-- nd:endblock b_001 -->",
-      "",
-    ].join("\n");
+  it("drops a classification that is invalid or below the confidence floor", () => {
+    const marker = (attrs: string) =>
+      [
+        "---",
+        "notedown: 2",
+        'title: "Broken"',
+        'created: "2026-01-01T00:00:00.000Z"',
+        'updated: "2026-01-01T00:00:00.000Z"',
+        'storage: "inline"',
+        "image_max_width: 1200",
+        "image_quality: 0.72",
+        "---",
+        "",
+        "# Broken",
+        "",
+        `<!-- nd:block b_001 code 2026-01-01T00:00:00.000Z${attrs} -->`,
+        "body",
+        "<!-- nd:endblock b_001 -->",
+        "",
+      ].join("\n");
 
-    const parsed = parseNotedownFile(broken, "broken.nd.md");
-    const classification = parsed.blocks[0].classification;
+    // An unknown language, an unreadable confidence and a bogus source are all
+    // dropped — and with no usable confidence the block is not classified at all.
+    expect(
+      parseNotedownFile(marker(" lang=cobol conf=abc src=hacker"), "b.nd.md")
+        .blocks[0].classification
+    ).toBeUndefined();
 
-    expect(classification?.language).toBeUndefined();
-    // An unreadable confidence is not a confidence of 0 — it is simply absent.
-    expect(classification?.confidence).toBe(0);
-    expect(classification?.source).toBe("automatic");
+    // A language with no confidence is not a verdict either: the writer always
+    // emits `conf`, so this can only be a hand-edited marker.
+    expect(
+      parseNotedownFile(marker(" lang=python"), "b.nd.md").blocks[0]
+        .classification
+    ).toBeUndefined();
+
+    // Below the classifier's own reporting floor, on purpose.
+    expect(
+      parseNotedownFile(marker(" conf=0.30 src=automatic"), "b.nd.md").blocks[0]
+        .classification
+    ).toBeUndefined();
+
+    // A well-formed verdict, with its unknown attributes dropped, still parses.
+    const kept = parseNotedownFile(
+      marker(" lang=python conf=0.95 src=user bogus=1"),
+      "b.nd.md"
+    ).blocks[0].classification;
+    expect(kept).toEqual({ source: "user", confidence: 0.95, language: "python" });
   });
 
   it("bumps the format version for the added attributes", () => {

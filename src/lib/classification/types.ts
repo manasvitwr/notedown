@@ -64,8 +64,6 @@ export interface CaptureContext {
   mimeType?: string;
   /** Type the capture already has, e.g. an asset-backed image block. */
   blockType?: BlockType;
-  /** Ids of assets referenced by the capture. */
-  assetIds?: string[];
 }
 
 export interface ClassificationResult {

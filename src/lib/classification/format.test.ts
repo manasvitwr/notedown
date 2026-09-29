@@ -10,6 +10,11 @@ function store(content: string): string {
   return classifyAndFormatCapture(content).content;
 }
 
+/** The verdict the app would record for a capture. */
+function classifyCaptureResult(content: string) {
+  return classifyAndFormatCapture(content).result;
+}
+
 describe("formatCaptureContent", () => {
   it("strips trailing punctuation from both the label and the href", () => {
     // People copy URLs out of prose, full stop included. The full stop is not
@@ -72,6 +77,23 @@ describe("formatCaptureContent", () => {
     expect(parseFence(unclosed)).toBeNull();
     const stored = formatCaptureContent({ type: "code", language: "python" }, unclosed);
     expect(parseFence(stored)?.body).toBe("```python\nprint('hi')");
+  });
+
+  it("keeps brackets that belong to the URL", () => {
+    // Parenthesis-heavy URLs are ordinary — a Wikipedia article title, an MDN
+    // function reference. Only the sentence's punctuation comes off, so the
+    // address survives intact in both the href and the label.
+    const wiki = "https://en.wikipedia.org/wiki/Python_(programming_language)";
+    expect(store(wiki)).toBe(`[${wiki}](${wiki})`);
+    expect(store(`${wiki}.`)).toBe(`[${wiki}](${wiki})`);
+    expect(store("https://example.com/a_(b)/c)")).toBe(
+      "[https://example.com/a_(b)/c](https://example.com/a_(b)/c)"
+    );
+    // A markdown link is read to its *matching* paren, so a nested one inside
+    // the href does not truncate it.
+    const link = "[Python](https://en.wikipedia.org/wiki/Python_(programming_language))";
+    expect(store(link)).toBe(link);
+    expect(classifyCaptureResult(link).type).toBe("link");
   });
 
   it("stores prose untouched", () => {

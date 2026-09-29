@@ -137,7 +137,6 @@ function classifyBlockContent(block: Block) {
   return classifyCapture(fenced ? fenced.body : block.content, {
     source: "manual",
     blockType: block.type,
-    assetIds: block.assetIds,
   });
 }
 

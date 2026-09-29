@@ -36,7 +36,6 @@ export function classificationKey(
         context.fileExtension ?? "",
         context.mimeType ?? "",
         context.blockType ?? "",
-        (context.assetIds ?? []).join(","),
       ].join("|")
     : "";
   return `${fnv1a(content)}:${content.length}:${fnv1a(contextKey)}`;

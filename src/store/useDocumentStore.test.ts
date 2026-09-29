@@ -83,6 +83,23 @@ describe("classification overrides", () => {
     expect(blockById("b_001").classification?.source).toBe("user");
   });
 
+  it("does not flip a block to image just because it mentions an asset", () => {
+    // `Block.assetIds` is filled in by scanning the text for `[img_…]`
+    // references, so a block documenting this app's own image syntax has a full
+    // set of them. Only a block that *is* an image may classify as one.
+    setup([
+      makeBlock({
+        type: "code",
+        content: "![shot][img_001]",
+        assetIds: ["img_001"],
+      }),
+    ]);
+
+    useDocumentStore.getState().classifyBlock("b_001");
+
+    expect(blockById("b_001").type).not.toBe("image");
+  });
+
   it("keeps the code fence in step with a language override", () => {
     const store = useDocumentStore.getState();
     store.setBlockLanguage("b_001", "python");

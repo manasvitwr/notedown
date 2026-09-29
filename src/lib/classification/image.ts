@@ -33,6 +33,12 @@ const imageSignal = (kind: string, detail: string): ClassificationSignal => ({
  * so an image verdict always implies an asset that will be displayable. A
  * `image/gif` or `image/tiff` capture is not an image block here — it is content
  * we have no way to show.
+ *
+ * What is deliberately *not* evidence: the block merely mentioning an asset id.
+ * `Block.assetIds` is filled in by scanning the text for `[img_…]` references,
+ * so a code sample that documents this very syntax has a full set of them — and
+ * flipping that to an image block would be worse than useless. A capture that
+ * really owns an asset is an image block, which is what `blockType` says.
  */
 export function detectImage(context?: CaptureContext): ImageEvidence | null {
   if (!context) return null;
@@ -49,13 +55,6 @@ export function detectImage(context?: CaptureContext): ImageEvidence | null {
     return {
       signals: [imageSignal("image.block-type", "block typed as image")],
       detail: "block type image",
-    };
-  }
-
-  if (context.assetIds && context.assetIds.length > 0) {
-    return {
-      signals: [imageSignal("image.asset", "capture references an asset")],
-      detail: `${context.assetIds.length} asset(s)`,
     };
   }
 

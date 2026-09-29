@@ -204,7 +204,6 @@ describe("classifyCapture", () => {
   it("15. image metadata classifies as image without language detection", () => {
     const result = classifyCapture("screenshot bytes", {
       mimeType: "image/png",
-      assetIds: ["img_001"],
     });
     expect(result.type).toBe("image");
     expect(result.language).toBeUndefined();
@@ -376,18 +375,13 @@ describe("classifyCapture", () => {
     // must not share a cache entry. An image is decided by metadata alone, while
     // the same text with no context is content that still has to be classified.
     const content = "photo-bytes";
-    const asImage = classifyCapture(content, {
-      mimeType: "image/png",
-      assetIds: ["img_001"],
-    });
+    const asImage = classifyCapture(content, { mimeType: "image/png" });
     const asText = classifyCapture(content);
     expect(asImage).not.toBe(asText);
     expect(asImage.type).toBe("image");
     expect(asText.type).not.toBe("image");
     // And each keeps its own entry.
-    expect(classifyCapture(content, { mimeType: "image/png", assetIds: ["img_001"] })).toBe(
-      asImage
-    );
+    expect(classifyCapture(content, { mimeType: "image/png" })).toBe(asImage);
     expect(classifyCapture(content)).toBe(asText);
   });
 

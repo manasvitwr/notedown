@@ -130,8 +130,9 @@ export function CaptureCard({ block, displayIndex, isDragging, isDimmed }: Captu
           </div>
         )}
 
-        {/* Dev-only evidence trail (stripped from production builds) */}
-        <ClassificationInspector block={block} />
+        {/* Dev-only evidence trail: the gate lives here so the component never
+            mounts (and its hooks never run) in a production build. */}
+        {import.meta.env.DEV && <ClassificationInspector block={block} />}
 
         {/* Footer: badge + time + controls */}
         <div className="flex items-center justify-between">

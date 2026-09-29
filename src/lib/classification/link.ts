@@ -24,10 +24,8 @@ const LINK_PROTOCOLS = new Set([
   "mailto:",
 ]);
 
-const MD_LINK_RE = /^\[([^\]\n]*)\]\(\s*((?:https?:\/\/|ftp:\/\/|mailto:)[^)\s]+)\s*\)$/;
 const BARE_WWW_RE = /^www\.[^\s/$.?#].[^\s]*$/i;
-/** Punctuation a human (or a reader) leaves at the end of a copied URL. */
-const TRAILING_PUNCTUATION = /[.,;:!?)\]}'"]+$/;
+const CLOSERS: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
 
 /**
  * Drop the trailing sentence punctuation a copy leaves on a URL.
@@ -36,9 +34,57 @@ const TRAILING_PUNCTUATION = /[.,;:!?)\]}'"]+$/;
  * into the markdown link and the label shown for it must be built from the same
  * stripped text, or "https://example.com." ends up recorded with a full stop in
  * the URL.
+ *
+ * Brackets are only dropped when they are *unbalanced* — a sentence that ends
+ * `.../Foo_(bar))` loses the sentence's bracket, not the URL's, and
+ * `.../Foo_(bar)` loses nothing at all.
  */
 export function stripTrailingPunctuation(url: string): string {
-  return url.replace(TRAILING_PUNCTUATION, "");
+  let end = url.length;
+  while (end > 0) {
+    const char = url[end - 1];
+    if (CLOSERS[char]) {
+      if (isBalanced(url, end)) break;
+    } else if (!/[.,;:!?'"]/.test(char)) {
+      break;
+    }
+    end--;
+  }
+  return url.slice(0, end);
+}
+
+/** True when the closers in `text.slice(0, end)` all have a matching opener. */
+function isBalanced(text: string, end: number): boolean {
+  const counts = { "(": 0, "[": 0, "{": 0, ")": 0, "]": 0, "}": 0 };
+  for (let i = 0; i < end; i++) {
+    const char = text[i];
+    if (char in counts) counts[char as keyof typeof counts]++;
+  }
+  return counts[")"] <= counts["("] && counts["]"] <= counts["["] && counts["}"] <= counts["{"];
+}
+
+/** `[label](href)` with the href read to its matching closing paren. */
+function parseMarkdownLink(text: string): { label: string; href: string } | null {
+  if (!text.startsWith("[")) return null;
+  const labelEnd = text.indexOf("](");
+  if (labelEnd < 0) return null;
+
+  let depth = 1;
+  for (let i = labelEnd + 2; i < text.length; i++) {
+    const char = text[i];
+    if (/\s/.test(char)) return null;
+    if (char === "(") depth++;
+    else if (char === ")") {
+      depth--;
+      if (depth === 0) {
+        // Nothing but the closing paren may follow.
+        return i === text.length - 1
+          ? { label: text.slice(1, labelEnd), href: text.slice(labelEnd + 2, i) }
+          : null;
+      }
+    }
+  }
+  return null;
 }
 
 function parseUrl(candidate: string): URL | null {
@@ -64,14 +110,14 @@ export function detectLink(content: string): LinkMatch | null {
   if (!trimmed || /\s/.test(trimmed)) return null;
 
   // Markdown link syntax on its own line: [label](url)
-  const md = MD_LINK_RE.exec(trimmed);
+  const md = parseMarkdownLink(trimmed);
   if (md) {
-    const url = parseUrl(md[2].replace(TRAILING_PUNCTUATION, ""));
+    const url = parseUrl(stripTrailingPunctuation(md.href));
     if (url) return { url: url.href, kind: "markdown-link" };
     return null;
   }
 
-  const withoutTrailing = trimmed.replace(TRAILING_PUNCTUATION, "");
+  const withoutTrailing = stripTrailingPunctuation(trimmed);
   const parsed = parseUrl(withoutTrailing);
   if (parsed) {
     // Keep the captured text verbatim in the href: no silent normalization

@@ -13,9 +13,10 @@ import type { ClassificationSignal } from "../../lib/classification";
  * Development-only explanation of a block's classification: the full evidence
  * trail, the weights it fed, and the alternatives that lost.
  *
- * This is a debugging surface, not product UI. It is gated on `import.meta.env.DEV`
- * so the whole component — and the classification it re-runs — is dropped from
- * production builds by dead-code elimination.
+ * This is a debugging surface, not product UI. `CaptureCard` renders it behind
+ * `import.meta.env.DEV`, so in a production build the branch is false, the
+ * element never mounts — no hooks run — and the tree-shaker drops the call along
+ * with the classification it re-runs.
  */
 export function ClassificationInspector({ block }: { block: Block }) {
   const [open, setOpen] = useState(false);
@@ -28,12 +29,9 @@ export function ClassificationInspector({ block }: { block: Block }) {
     const result = classifyCapture(fenced ? fenced.body : block.content, {
       source: "manual",
       blockType: block.type,
-      assetIds: block.assetIds,
     });
     return { result, text: explainClassification(result) };
-  }, [open, block.content, block.type, block.assetIds]);
-
-  if (!import.meta.env.DEV) return null;
+  }, [open, block.content, block.type]);
 
   return (
     <div className="mt-1" onClick={(e) => e.stopPropagation()}>

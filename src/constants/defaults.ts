@@ -10,7 +10,10 @@ export const DEFAULT_SETTINGS: DocumentSettings = {
 };
 
 // ─── Notedown Format Version ────────────────────────────────
-export const NOTEDOWN_VERSION = 1;
+// v2: block markers may carry trailing classification attributes
+// (lang=/src=/conf=/cand=). v1 files parse unchanged — the attributes are
+// optional, so the version bump documents the addition, not a migration.
+export const NOTEDOWN_VERSION = 2;
 
 // ─── File Extension ─────────────────────────────────────────
 export const FILE_EXTENSION = ".nd.md";

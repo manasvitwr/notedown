@@ -12,6 +12,7 @@ import { parseNotedownFile, createBlockSectionRegex, stripDataSection } from "..
 import { extractAssetIds, extractLinkedReferenceIds, sweepPreservedAssetLines } from "../../lib/assetIds";
 import { serializeDocument } from "../../lib/markdownSerializer";
 import { processPaste } from "../../lib/clipboard";
+import { classifyAndFormatCapture, toBlockClassification } from "../../lib/classification";
 import type { Block, EditorMode } from "../../types";
 
 // Debounce between a raw markdown keystroke and the store round-trip.
@@ -83,22 +84,37 @@ export function EditorPane() {
             block.source = existing.source;
             block.tags = existing.tags;
             block.updatedAt = existing.updatedAt;
+            // A user override must never be silently downgraded, so a marker
+            // that lost its attributes during a raw edit is restored from the
+            // store. An automatic verdict is deliberately NOT restored: the
+            // classifier owns those, and re-deriving one is cheap — carrying a
+            // stale copy here would give it a second owner.
+            if (!block.classification && existing.classification?.source === "user") {
+              block.classification = existing.classification;
+            }
           }
         }
 
         // Extract free text outside block fences and wrap into a new block.
         // Only fires when the user actually typed content outside a fence. The
         // id comes from the store's monotonic allocator, never a local max+1.
+        // Typed content is classified like any other capture, so a snippet
+        // pasted into raw markdown still lands as code with its language.
         const freeText = extractFreeTextOutsideBlocks(md);
         if (freeText.trim()) {
+          const { result, content } = classifyAndFormatCapture(freeText, {
+            source: "manual",
+          });
+          const classification = toBlockClassification(result);
           const newBlock: Block = {
             id: allocateBlockId(),
-            type: "text",
-            content: freeText.trim(),
+            type: result.blockType,
+            content,
             createdAt: new Date().toISOString(),
             tags: [],
             assetIds: extractAssetIds(freeText.trim()),
             source: "edit",
+            ...(classification ? { classification } : {}),
           };
           parsed.blocks.push(newBlock);
         }

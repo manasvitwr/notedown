@@ -3,6 +3,9 @@ import { formatBlockTime } from "../../lib/dates";
 import { useDocumentStore } from "../../store/useDocumentStore";
 import { scrollToBlock } from "../../lib/scrollToBlock";
 import { dataUri } from "../../lib/imageMime";
+import { BlockClassificationMenu } from "./BlockClassificationMenu";
+import { ClassificationInspector } from "./ClassificationInspector";
+import { languageLabel } from "../../lib/classification";
 import { FileText, Link, Code, Mic, Image, Layers, ChevronUp, ChevronDown, ChevronRight, ChevronLeft } from "lucide-react";
 import type { BlockType } from "../../types";
 
@@ -62,6 +65,14 @@ export function CaptureCard({ block, displayIndex, isDragging, isDimmed }: Captu
   // Imported blocks are branded as IMPORTED (vs PASTED/clipboard captures)
   const badgeLabel = block.source === "import" ? "IMPORTED" : config.label;
 
+  // A code block shows the language the classifier named ("CODE · PYTHON"). With
+  // no language — below threshold, ambiguous, or never classified — it stays
+  // plain "CODE" rather than guessing a label in the UI.
+  const language = block.type === "code" ? block.classification?.language : undefined;
+  const typeBadge = language
+    ? `${config.label} · ${languageLabel(language).toUpperCase()}`
+    : badgeLabel;
+
   // Get preview text (first 120 chars, strip markdown)
   const preview = block.content
     .replace(/```[\s\S]*?```/g, "[code]")
@@ -119,15 +130,20 @@ export function CaptureCard({ block, displayIndex, isDragging, isDimmed }: Captu
           </div>
         )}
 
+        {/* Dev-only evidence trail: the gate lives here so the component never
+            mounts (and its hooks never run) in a production build. */}
+        {import.meta.env.DEV && <ClassificationInspector block={block} />}
+
         {/* Footer: badge + time + controls */}
         <div className="flex items-center justify-between">
           <span
             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${config.color}`}
           >
             {config.icon}
-            {badgeLabel}
+            {typeBadge}
           </span>
           <div className="flex items-center gap-1">
+            <BlockClassificationMenu block={block} />
             <button
               onClick={(e) => { e.stopPropagation(); moveBlock(block.id, "up"); }}
               disabled={isFirst}

@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import type {
   DocumentState,
   Block,
+  BlockType,
   Asset,
   EditorMode,
   SaveStatus,
@@ -10,6 +11,15 @@ import type {
 } from "../types";
 import { createEmptyDocument, BLOCK_PREFIX, ASSET_PREFIX } from "../constants/defaults";
 import { serializeDocument } from "../lib/markdownSerializer";
+import {
+  captureTypeOf,
+  classifyCapture,
+  formatCaptureContent,
+  parseFence,
+  toBlockClassification,
+  userClassification,
+} from "../lib/classification";
+import type { BlockClassification, CodeLanguage } from "../lib/classification";
 import { extractLinkedReferenceIds, sweepPreservedAssetLines } from "../lib/assetIds";
 import { saveDocument, loadActiveDocument, getRecentDocuments } from "../lib/storage";
 import { stringByteSize, calculatePortableScore } from "../lib/size";
@@ -41,6 +51,22 @@ interface DocumentStore {
   moveBlock: (blockId: string, direction: "up" | "down") => void;
   reorderBlocks: (orderedIds: string[]) => void;
   toggleBlockCollapse: (blockId: string) => void;
+
+  // ─── Classification ──────────────────────────────────────
+  /**
+   * User override: force a block's type. Recorded with `source: "user"` so no
+   * later automatic pass can undo it.
+   */
+  setBlockType: (blockId: string, type: BlockType) => void;
+  /** User override: force (or clear, with `undefined`) a block's language. */
+  setBlockLanguage: (blockId: string, language?: CodeLanguage) => void;
+  /**
+   * Re-run the classifier on one block. A block the user has taken over is left
+   * alone unless `force` is set, which is what makes overrides sticky.
+   */
+  classifyBlock: (blockId: string, options?: { force?: boolean }) => void;
+  /** Classify every block that has no classification yet. */
+  reclassifyUnclassified: () => void;
 
   // ─── Asset Actions ──────────────────────────────────────
   addAsset: (asset: Asset) => void;
@@ -96,6 +122,41 @@ function advanceIdCounters(
   return {
     nextBlockNum: Math.max(current.nextBlockNum, maxBlockNum + 1),
     nextAssetNum: Math.max(current.nextAssetNum, maxAssetNum + 1),
+  };
+}
+
+/**
+ * Classify a block's own content, looking through the fence first.
+ *
+ * A code block is stored fenced, and the fence would otherwise be the loudest
+ * thing in the content — so the body is what gets classified, and the fence is
+ * rewritten afterwards from the verdict.
+ */
+function classifyBlockContent(block: Block) {
+  const fenced = parseFence(block.content);
+  return classifyCapture(fenced ? fenced.body : block.content, {
+    source: "manual",
+    blockType: block.type,
+  });
+}
+
+/**
+ * Write a classification verdict onto a block: type, markdown form and metadata
+ * always move together, so the badge can never contradict the stored content.
+ */
+function applyClassification(
+  block: Block,
+  result: ReturnType<typeof classifyCapture>,
+  source: BlockClassification["source"]
+): Block {
+  const fenced = parseFence(block.content);
+  const body = fenced ? fenced.body : block.content;
+  const classification = toBlockClassification(result, source);
+  return {
+    ...block,
+    type: result.blockType,
+    content: formatCaptureContent(result, body),
+    ...(classification ? { classification } : { classification: undefined }),
   };
 }
 
@@ -244,6 +305,106 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
     };
     // Defer serialization — recomputed lazily when needed
     set({ doc: updated, saveStatus: "unsaved" });
+  },
+
+  // ─── Classification ──────────────────────────────────────
+
+  setBlockType: (blockId: string, type: BlockType) => {
+    const { doc } = get();
+    if (!doc) return;
+    const updated: DocumentState = {
+      ...doc,
+      blocks: doc.blocks.map((b) => {
+        if (b.id !== blockId) return b;
+        // The user's chosen type *is* the verdict here, so the stored markdown
+        // is shaped by the same formatter the capture paths use rather than by
+        // a second copy of the unwrap/fence rule. Naming a language is the other
+        // half of that verdict, and `setBlockLanguage` covers it.
+        const content = formatCaptureContent(
+          {
+            type: captureTypeOf(type),
+            language: type === "code" ? b.classification?.language : undefined,
+          },
+          b.content
+        );
+        const next: Block = {
+          ...b,
+          type,
+          content,
+          updatedAt: new Date().toISOString(),
+        };
+        // A user override is explicit and final: `confidence: 1` records that
+        // this was not a guess, and `source: "user"` makes later automatic
+        // passes skip the block.
+        next.classification =
+          type === "code"
+            ? userClassification(b.classification?.language)
+            : { source: "user", confidence: 1 };
+        return next;
+      }),
+      updatedAt: new Date().toISOString(),
+    };
+    set({ doc: updated, saveStatus: "unsaved" });
+    get().reserialize();
+  },
+
+  setBlockLanguage: (blockId: string, language?: CodeLanguage) => {
+    const { doc } = get();
+    if (!doc) return;
+    const updated: DocumentState = {
+      ...doc,
+      blocks: doc.blocks.map((b) => {
+        if (b.id !== blockId) return b;
+        // Naming a language implies the block is code, so the fence and the
+        // type follow the choice instead of contradicting it.
+        const next: Block = {
+          ...b,
+          type: "code",
+          content: formatCaptureContent({ type: "code", language }, b.content),
+          classification: userClassification(language),
+          updatedAt: new Date().toISOString(),
+        };
+        return next;
+      }),
+      updatedAt: new Date().toISOString(),
+    };
+    set({ doc: updated, saveStatus: "unsaved" });
+    get().reserialize();
+  },
+
+  classifyBlock: (blockId: string, options) => {
+    const { doc } = get();
+    if (!doc) return;
+    const force = options?.force ?? false;
+    const updated: DocumentState = {
+      ...doc,
+      blocks: doc.blocks.map((b) => {
+        if (b.id !== blockId) return b;
+        if (b.classification?.source === "user" && !force) return b;
+        return applyClassification(b, classifyBlockContent(b), "automatic");
+      }),
+      updatedAt: new Date().toISOString(),
+    };
+    set({ doc: updated, saveStatus: "unsaved" });
+    get().reserialize();
+  },
+
+  reclassifyUnclassified: () => {
+    const { doc } = get();
+    if (!doc) return;
+    let changed = false;
+    const updated: DocumentState = {
+      ...doc,
+      blocks: doc.blocks.map((b) => {
+        if (b.classification) return b;
+        changed = true;
+        return applyClassification(b, classifyBlockContent(b), "automatic");
+      }),
+      updatedAt: new Date().toISOString(),
+    };
+    if (!changed) return;
+    set({ doc: updated, saveStatus: "unsaved" });
+    get().reserialize();
   },
 
   // ─── Asset Actions ──────────────────────────────────────

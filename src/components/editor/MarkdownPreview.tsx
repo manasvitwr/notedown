@@ -1,32 +1,19 @@
 import { useMemo } from "react";
 import MarkdownIt from "markdown-it";
-import hljs from "highlight.js";
 import { useDocumentStore } from "../../store/useDocumentStore";
+import { highlightCode } from "../../lib/classification/highlight";
 import { dataUri, BLANK_IMAGE_SRC } from "../../lib/imageMime";
 import { extractDefinedReferenceIds } from "../../lib/assetIds";
 import type { Asset } from "../../types";
 
-// Initialize markdown-it with highlight.js
+// Initialize markdown-it with the app's own highlighter: the same highlight.js
+// instance and grammar set the classifier uses, so a block can never be
+// highlighted as something the app would not classify it as.
 const md = MarkdownIt({
   html: false,
   linkify: true,
   typographer: false,
-  highlight: (str: string, lang: string) => {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return hljs.highlight(str, { language: lang }).value;
-      } catch {
-        /* fallthrough */
-      }
-    }
-    // Auto-detect
-    try {
-      return hljs.highlightAuto(str).value;
-    } catch {
-      /* fallthrough */
-    }
-    return "";
-  },
+  highlight: (str: string, lang: string) => highlightCode(str, lang) ?? "",
 });
 
 // Custom renderer: resolve [img_xxx] reference-style links to inline data URIs
@@ -86,14 +73,18 @@ export function MarkdownPreview({ markdown }: MarkdownPreviewProps) {
     // "&lt;!-- nd:block ... --&gt;"), so a marker alone on its line becomes its
     // own <p>. Match that shape to wrap each block's content in an anchor div.
     // Collapsed blocks get a CSS class that hides their content.
+    //
+    // The marker tail is matched loosely (`[^&]*`) rather than token by token:
+    // the tail carries the optional `collapsed` flag and the optional
+    // classification attributes (`lang=`/`src=`/`conf=`/`cand=`), and this must
+    // keep working as more attributes are added without touching this regex.
     return rendered
       .replace(
-        /<p>&lt;!-- nd:block (\S+) \S+ \S+ collapsed --&gt;<\/p>\s*([\s\S]*?)\s*<p>&lt;!-- nd:endblock \1 --&gt;<\/p>/g,
-        '<div id="block-$1" class="nd-block-anchor nd-block-collapsed">$2</div>'
-      )
-      .replace(
-        /<p>&lt;!-- nd:block (\S+) \S+ \S+ --&gt;<\/p>\s*([\s\S]*?)\s*<p>&lt;!-- nd:endblock \1 --&gt;<\/p>/g,
-        '<div id="block-$1" class="nd-block-anchor">$2</div>'
+        /<p>&lt;!-- nd:block (\S+) \S+ \S+ ([^&]*?)--&gt;<\/p>\s*([\s\S]*?)\s*<p>&lt;!-- nd:endblock \1 --&gt;<\/p>/g,
+        (_match, id: string, tail: string, body: string) =>
+          `<div id="block-${id}" class="nd-block-anchor${
+            /(?:^|\s)collapsed(?:\s|$)/.test(tail) ? " nd-block-collapsed" : ""
+          }">${body}</div>`
       )
       .replace(/<p>&lt;!-- nd:\w+ --&gt;<\/p>\s*/g, "");
   }, [processedMarkdown]);

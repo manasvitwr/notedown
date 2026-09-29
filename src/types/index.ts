@@ -1,6 +1,8 @@
 // ─── Block Types ────────────────────────────────────────────
 export type BlockType = "text" | "image" | "code" | "transcript" | "link" | "mixed";
 
+import type { BlockClassification } from "../lib/classification/types";
+
 // ─── Image Types ────────────────────────────────────────────
 export type ImageMime = "image/webp" | "image/jpeg" | "image/png";
 
@@ -24,6 +26,12 @@ export interface Block {
   assetIds: string[];
   source?: string;
   collapsed?: boolean;
+  /**
+   * Classification metadata, written by the automatic classifier or by a user
+   * override. Optional: blocks created before this feature (and blocks the user
+   * never classified) simply have none, and the UI falls back to `type`.
+   */
+  classification?: BlockClassification;
 }
 
 // ─── Asset ──────────────────────────────────────────────────

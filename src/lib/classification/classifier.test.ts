@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { classifyCapture, explainClassification } from "./classifier";
 import { clearClassificationCache } from "./hash";
+import { captureTypeOf } from "./format";
 import type { ClassificationResult } from "./types";
 
 const PROSE =
@@ -64,6 +65,22 @@ function add(row) {
   total += row.amount;
   return total;
 }`;
+
+/**
+ * A speaker turn plus a timestamped line: two independent transcript patterns,
+ * which is what the `transcript` app subtype requires.
+ */
+const TRANSCRIPT_SAMPLE = `[00:12] Welcome back to the show.
+Moderator: Thanks for joining us today.`;
+
+/**
+ * Code carrying a single transcript-shaped comment. One pattern must not
+ * promote the capture, and code outranks the app subtype regardless.
+ */
+const CODE_WITH_TRANSCRIPT_LINE = `# [00:12] intro cut
+def load(text):
+    return json.loads(text)
+`;
 
 function expectCode(result: ClassificationResult, language?: string): void {
   expect(result.type).toBe("code");
@@ -195,8 +212,28 @@ describe("classifyCapture", () => {
     expect(codeSignals.some((s) => s.layer === 3 || s.layer === 2)).toBe(true);
   });
 
-  it("explains itself for debugging", () => {
-    const explanation = explainClassification(classifyCapture(JSON_SAMPLE));
+  it("18. two transcript markers give the transcript app subtype of text", () => {
+    const result = classifyCapture(TRANSCRIPT_SAMPLE);
+    // `transcript` is an app subtype, never a sixth top-level capture type.
+    expect(result.type).toBe("text");
+    expect(result.blockType).toBe("transcript");
+    expect(captureTypeOf(result.blockType)).toBe("text");
+    expect(result.confidence).toBeGreaterThanOrEqual(0.7);
+    expect(result.signals.some((s) => s.kind.startsWith("transcript."))).toBe(
+      true
+    );
+  });
+
+  it("19. one transcript line inside code stays code", () => {
+    const result = classifyCapture(CODE_WITH_TRANSCRIPT_LINE);
+    expect(result.type).toBe("code");
+    expect(result.blockType).toBe("code");
+    expect(result.signals.some((s) => s.kind.startsWith("transcript."))).toBe(
+      false
+    );
+  });
+
+  it("explains itself for debugging", () => {    const explanation = explainClassification(classifyCapture(JSON_SAMPLE));
     expect(explanation).toContain("code (json)");
     expect(explanation).toContain("json.parse-ok");
   });

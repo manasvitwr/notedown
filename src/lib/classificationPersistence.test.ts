@@ -217,6 +217,13 @@ describe("plain file import", () => {
     expect(imported.blocks[0].classification?.language).toBe("python");
   });
 
+  it("classifies an imported image as an image block with metadata", () => {
+    const imported = createPlainImport("photo-bytes", "photo.png");
+    expect(imported.blocks[0].type).toBe("image");
+    expect(imported.blocks[0].classification).toBeDefined();
+    expect(imported.blocks[0].classification?.source).toBe("automatic");
+  });
+
   it("classifies an imported .md file from its content, not its name", () => {
     const imported = createPlainImport("Just a plain note.", "notes.md");
     expect(imported.blocks[0].type).toBe("text");

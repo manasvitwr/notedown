@@ -288,6 +288,31 @@ describe("classifyCapture", () => {
     expect(imported.signals.some((s) => s.kind === "context.extension")).toBe(true);
   });
 
+  it("21. a trusted image extension is an image, and never reaches detection", () => {
+    const result = classifyCapture("photo-bytes", {
+      source: "import",
+      filename: "photo.png",
+    });
+    expect(result.type).toBe("image");
+    expect(result.blockType).toBe("image");
+    expect(result.language).toBeUndefined();
+    // Layer 1 settled it; nothing downstream ran.
+    expect(result.signals.every((s) => s.layer === 1)).toBe(true);
+    expect(result.signals.some((s) => s.kind === "image.extension")).toBe(true);
+  });
+
+  it("22. an imported svg is markup, not an unbacked image block", () => {
+    // `svg` is in the language map (as html) and must not also be an image
+    // extension: there are no asset bytes behind an imported svg, so an
+    // image-typed block would have nothing to render.
+    const result = classifyCapture("<svg viewBox='0 0 1 1'></svg>", {
+      source: "import",
+      filename: "icon.svg",
+    });
+    expect(result.type).toBe("code");
+    expect(result.signals.some((s) => s.kind.startsWith("image."))).toBe(false);
+  });
+
   it("explains itself for debugging", () => {    const explanation = explainClassification(classifyCapture(JSON_SAMPLE));
     expect(explanation).toContain("code (json)");
     expect(explanation).toContain("json.parse-ok");

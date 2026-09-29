@@ -35,6 +35,26 @@ describe("formatCaptureContent", () => {
     expect(store(content)).toBe("```python\ndef add(a, b):\n    return a + b\n```");
   });
 
+  it("preserves an explicit fence the user brought, whichever way it classifies", () => {
+    // The policy: a fence that came *with* the capture is the user's, and the
+    // formatter never rewrites it — neither the tag nor the language. A fence
+    // the app wrote from its own classification is a different matter, and is
+    // re-written from the verdict by the store (see useDocumentStore, which
+    // classifies the unwrapped body and fences it again).
+    const proseFence = "```py\nJust a note.\n```";
+    expect(classifyCapture(proseFence).type).toBe("text");
+    expect(store(proseFence)).toBe(proseFence);
+
+    // A `python` fence around a JSON body: even told the verdict is json, the
+    // formatter leaves the user's fence exactly as typed. A stale language tag
+    // the user wrote themselves is not silently corrected — being wrong about
+    // something someone typed by hand is worse than correcting it for them.
+    const mislabelled = '```python\n{"a": 1}\n```';
+    expect(
+      formatCaptureContent({ type: "code", language: "json" }, mislabelled)
+    ).toBe(mislabelled);
+  });
+
   it("stores prose and already-fenced code untouched", () => {
     expect(store("Just a note.")).toBe("Just a note.");
     const fenced = "```py\nx = 1\n```";

@@ -146,7 +146,14 @@ export const FILE_EXTENSION_LANGUAGES: Record<string, CodeLanguage> = {
   // extension would turn every imported note into "code / markdown".
 };
 
-/** Image extensions, used only when an import carries no mime type. */
+/**
+ * Image extensions, used only when an import carries no mime type.
+ *
+ * `svg` is deliberately absent even though it is an image format: it is also
+ * text markup we can store, and an image-typed block with no stored asset is a
+ * dead end. Imported SVGs are classified as `html` instead, which is what they
+ * are.
+ */
 export const IMAGE_EXTENSIONS = new Set([
   "png",
   "jpg",
@@ -155,7 +162,6 @@ export const IMAGE_EXTENSIONS = new Set([
   "gif",
   "bmp",
   "avif",
-  "svg",
 ]);
 
 /** Display names for the language picker. */

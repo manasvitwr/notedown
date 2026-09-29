@@ -52,6 +52,25 @@ const HLJS_TO_LANGUAGE: Record<string, CodeLanguage> = {
   bash: "bash",
 };
 
+/**
+ * Highlight `code` as `language`, or return null when we have no grammar for it.
+ *
+ * The preview highlights through here, so the whole app shares one `highlight.js`
+ * instance and one grammar set — the languages Notedown can actually name, not
+ * the ~190 grammars of the common build. An unnamed or unrecognised fence
+ * returns null rather than falling back to auto-detection: no language in the
+ * fence means the app had no verdict to record, and guessing one in the renderer
+ * would put a language on screen that the document never claims.
+ */
+export function highlightCode(code: string, language?: string): string | null {
+  if (!language || !hljs.getLanguage(language)) return null;
+  try {
+    return hljs.highlight(code, { language }).value;
+  } catch {
+    return null;
+  }
+}
+
 export interface HighlightCandidate {
   language: CodeLanguage;
   /** 0..1, strength weighted by how decisive the detection was. */

@@ -149,20 +149,13 @@ export const FILE_EXTENSION_LANGUAGES: Record<string, CodeLanguage> = {
 /**
  * Image extensions, used only when an import carries no mime type.
  *
- * `svg` is deliberately absent even though it is an image format: it is also
- * text markup we can store, and an image-typed block with no stored asset is a
- * dead end. Imported SVGs are classified as `html` instead, which is what they
- * are.
+ * These are exactly the formats the app can store and render
+ * (`IMAGE_MIME_ALLOWLIST` in `lib/imageMime`): an image-typed block with no
+ * asset behind it is a dead end, so a format we cannot render is never named as
+ * one. `svg` is absent for the same reason plus a second — it is also text
+ * markup we can store, and imported SVGs are classified as `html` instead.
  */
-export const IMAGE_EXTENSIONS = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "webp",
-  "gif",
-  "bmp",
-  "avif",
-]);
+export const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
 
 /** Display names for the language picker. */
 export const LANGUAGE_LABELS: Record<CodeLanguage, string> = {

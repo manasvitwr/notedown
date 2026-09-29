@@ -1,32 +1,19 @@
 import { useMemo } from "react";
 import MarkdownIt from "markdown-it";
-import hljs from "highlight.js";
 import { useDocumentStore } from "../../store/useDocumentStore";
+import { highlightCode } from "../../lib/classification/highlight";
 import { dataUri, BLANK_IMAGE_SRC } from "../../lib/imageMime";
 import { extractDefinedReferenceIds } from "../../lib/assetIds";
 import type { Asset } from "../../types";
 
-// Initialize markdown-it with highlight.js
+// Initialize markdown-it with the app's own highlighter: the same highlight.js
+// instance and grammar set the classifier uses, so a block can never be
+// highlighted as something the app would not classify it as.
 const md = MarkdownIt({
   html: false,
   linkify: true,
   typographer: false,
-  highlight: (str: string, lang: string) => {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return hljs.highlight(str, { language: lang }).value;
-      } catch {
-        /* fallthrough */
-      }
-    }
-    // Auto-detect
-    try {
-      return hljs.highlightAuto(str).value;
-    } catch {
-      /* fallthrough */
-    }
-    return "";
-  },
+  highlight: (str: string, lang: string) => highlightCode(str, lang) ?? "",
 });
 
 // Custom renderer: resolve [img_xxx] reference-style links to inline data URIs

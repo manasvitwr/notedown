@@ -50,8 +50,3 @@ export function languageFromExtension(context?: CaptureContext): CodeLanguage | 
   if (!trusted || !extension) return undefined;
   return FILE_EXTENSION_LANGUAGES[extension];
 }
-
-/** True for `image/*` mime types. */
-export function isImageMime(mimeType?: string): boolean {
-  return (mimeType ?? "").trim().toLowerCase().startsWith("image/");
-}

@@ -371,6 +371,28 @@ describe("classifyCapture", () => {
     expect(classifyCapture(samples[samples.length - 1])).toBe(last);
   });
 
+  it("only calls a capture an image when the asset can be rendered", () => {
+    // The allowlist is the render allowlist: a format we refuse to store is
+    // content we have no way to show, so it must not become an image block with
+    // nothing behind it.
+    for (const unrenderable of ["image/gif", "image/bmp", "image/avif", "image/tiff"]) {
+      const result = classifyCapture("some bytes", { mimeType: unrenderable });
+      expect(result.type, unrenderable).not.toBe("image");
+    }
+    for (const unrenderable of ["photo.gif", "photo.bmp", "photo.avif"]) {
+      const result = classifyCapture("some bytes", {
+        source: "import",
+        filename: unrenderable,
+      });
+      expect(result.type, unrenderable).not.toBe("image");
+    }
+    // What we can render still is an image.
+    expect(
+      classifyCapture("some bytes", { source: "import", filename: "photo.png" })
+        .type
+    ).toBe("image");
+  });
+
   it("explains itself for debugging", () => {
     const explanation = explainClassification(classifyCapture(JSON_SAMPLE));
     expect(explanation).toContain("code (json)");

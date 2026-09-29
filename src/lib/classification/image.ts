@@ -1,5 +1,6 @@
 import { IMAGE_EXTENSIONS } from "./config";
-import { contextExtension, isImageMime } from "./context";
+import { isAllowedImageMime } from "../imageMime";
+import { contextExtension } from "./context";
 import type { CaptureContext, ClassificationSignal } from "./types";
 
 /**
@@ -27,12 +28,17 @@ const imageSignal = (kind: string, detail: string): ClassificationSignal => ({
 /**
  * Return image evidence when the capture context says the content is an image,
  * or null when it says nothing (or says it is not).
+ *
+ * A MIME type only counts when it is one the app can actually store and render,
+ * so an image verdict always implies an asset that will be displayable. A
+ * `image/gif` or `image/tiff` capture is not an image block here — it is content
+ * we have no way to show.
  */
 export function detectImage(context?: CaptureContext): ImageEvidence | null {
   if (!context) return null;
 
   const mime = context.mimeType;
-  if (mime && isImageMime(mime)) {
+  if (mime && isAllowedImageMime(mime.toLowerCase())) {
     return {
       signals: [imageSignal("image.mime", `mime ${mime}`)],
       detail: mime,

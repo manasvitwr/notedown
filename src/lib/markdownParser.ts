@@ -1,7 +1,7 @@
 import type { Asset, Block, BlockType, DocumentState, ImageMime, StorageMode } from "../types";
 import type { BlockClassification, CodeLanguage } from "./classification/types";
 import { CODE_LANGUAGES } from "./classification/types";
-import { classifyCapture, formatCaptureContent, toBlockClassification } from "./classification";
+import { classifyAndFormatCapture, toBlockClassification } from "./classification";
 import { MIN_CONFIDENCE } from "./classification/config";
 import { DEFAULT_SETTINGS } from "../constants/defaults";
 import { nanoid } from "nanoid";
@@ -170,7 +170,10 @@ export function createPlainImport(
   const title = filename.replace(/\.[^.]+$/, "");
   const now = new Date().toISOString();
 
-  const result = classifyCapture(raw, { source: "import", filename });
+  const { result, content } = classifyAndFormatCapture(raw, {
+    source: "import",
+    filename,
+  });
   const classification = toBlockClassification(result);
 
   return {
@@ -183,7 +186,7 @@ export function createPlainImport(
       {
         id: "b_001",
         type: result.blockType,
-        content: formatCaptureContent(result, raw),
+        content,
         createdAt: now,
         tags: [],
         assetIds: [],

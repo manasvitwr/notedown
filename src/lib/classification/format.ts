@@ -1,11 +1,13 @@
 import type { Block, BlockType } from "../../types";
 import type {
   BlockClassification,
+  CaptureContext,
   CaptureType,
   ClassificationResult,
   CodeLanguage,
 } from "./types";
 import { LANGUAGE_LABELS, MIN_CONFIDENCE } from "./config";
+import { classifyCapture } from "./classifier";
 import { detectLink, stripTrailingPunctuation } from "./link";
 
 /**
@@ -24,11 +26,6 @@ export function languageLabel(language?: string): string {
   return LANGUAGE_LABELS[language as keyof typeof LANGUAGE_LABELS] ?? "Code";
 }
 
-/** True when content is already wrapped in a fenced code block. */
-export function isFenced(content: string): boolean {
-  return /^```/.test(content.trim());
-}
-
 export interface FencedContent {
   /** The code itself, with the fence removed. */
   body: string;
@@ -43,6 +40,9 @@ export interface FencedContent {
  * state — it is written from the classification on the way in and removed from
  * it on the way out, so a re-classification can never leave a ```fence behind
  * on a block that is no longer code.
+ *
+ * An unclosed fence is not a fence: there is nothing to unwrap, so the content
+ * is reported as unfenced and left for the classifier to judge as written.
  */
 export function parseFence(content: string): FencedContent | null {
   const match = /^```[ \t]*([\w+#-]*)[ \t]*\n([\s\S]*?)\n?```$/.exec(content.trim());
@@ -61,30 +61,56 @@ export function fenceContent(body: string, language?: string): string {
 }
 
 /**
- * Turn raw captured text into the markdown that gets stored in the block.
- * Only `link` and `code` need rewriting; everything else is stored as typed.
+ * Turn captured text into the markdown that gets stored in the block.
+ *
+ * The fence is *derived* state, so whatever fence arrived with the capture is
+ * dropped here and code is re-fenced from the verdict. That keeps the stored
+ * markdown from ever contradicting the classification stored beside it, and
+ * gives an incoming ```python fence the same treatment on the way in as
+ * `applyClassification` gives it on the way out.
  */
 export function formatCaptureContent(
   result: Pick<ClassificationResult, "type" | "language">,
   content: string
 ): string {
-  const trimmed = content.trim();
+  const fenced = parseFence(content);
+  const body = (fenced ? fenced.body : content).trim();
   if (result.type === "link") {
     // A bare URL becomes a markdown link; markdown link syntax the user already
     // captured is left exactly as it is, because wrapping it would break it.
     // The href comes from `detectLink` itself and the label from the same
     // trailing-punctuation strip, so a copied "https://example.com." cannot end
     // up with the full stop inside the URL.
-    const match = detectLink(trimmed);
+    const match = detectLink(body);
     if (match && match.kind !== "markdown-link") {
-      return `[${stripTrailingPunctuation(trimmed)}](${match.url})`;
+      return `[${stripTrailingPunctuation(body)}](${match.url})`;
     }
-    return trimmed;
+    return body;
   }
-  if (result.type === "code" && !isFenced(trimmed)) {
-    return fenceContent(trimmed, result.language);
+  if (result.type === "code") {
+    return fenceContent(body, result.language);
   }
-  return trimmed;
+  return body;
+}
+
+/**
+ * Classify raw captured text and return the markdown to store, in one step.
+ *
+ * Every capture path — paste, file import, typed text — goes through here, so
+ * they cannot drift apart. A fence that arrived *with* the capture is stripped
+ * before classification, because a pasted ```python block is code, not text
+ * that happens to mention a fence: `JSON.parse("{...}")` fails on the fence
+ * lines, and the fence itself reads as an ordinary special token. The same rule
+ * `applyClassification` applies when a block is re-classified later.
+ */
+export function classifyAndFormatCapture(
+  content: string,
+  context?: CaptureContext
+): { result: ClassificationResult; content: string } {
+  const fenced = parseFence(content);
+  const body = fenced ? fenced.body : content;
+  const result = classifyCapture(body, context);
+  return { result, content: formatCaptureContent(result, body) };
 }
 
 /**

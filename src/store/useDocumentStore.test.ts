@@ -59,6 +59,30 @@ describe("classification overrides", () => {
     expect(blockById("b_001").classification?.source).toBe("user");
   });
 
+  it("leaves code for any other type, fence and all", () => {
+    // A fence is code syntax, so a block that is no longer code must not keep
+    // one — whatever it is now instead. Each of these is a plain-text type.
+    setup([
+      makeBlock({ type: "code", content: "```python\nprint('hi')\n```" }),
+    ]);
+    const store_ = useDocumentStore.getState();
+
+    store_.setBlockType("b_001", "link");
+    expect(blockById("b_001").type).toBe("link");
+    expect(blockById("b_001").content).toBe("print('hi')");
+    expect(blockById("b_001").content.startsWith("```")).toBe(false);
+    expect(blockById("b_001").classification).toEqual({
+      source: "user",
+      confidence: 1,
+    });
+
+    store_.setBlockType("b_001", "code");
+    store_.setBlockType("b_001", "image");
+    expect(blockById("b_001").type).toBe("image");
+    expect(blockById("b_001").content.startsWith("```")).toBe(false);
+    expect(blockById("b_001").classification?.source).toBe("user");
+  });
+
   it("keeps the code fence in step with a language override", () => {
     const store = useDocumentStore.getState();
     store.setBlockLanguage("b_001", "python");

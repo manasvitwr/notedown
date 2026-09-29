@@ -1,5 +1,5 @@
 import type { Block, Asset, DocumentState } from "../types";
-import { classifyCapture, formatCaptureContent, toBlockClassification } from "./classification";
+import { classifyAndFormatCapture, toBlockClassification } from "./classification";
 import { compressImage } from "./imageCompression";
 import { isAllowedImageMime } from "./imageMime";
 
@@ -109,13 +109,15 @@ export async function processPaste(
 
     // Classify once, then reuse the verdict for both the stored type and the
     // stored markdown, so the badge and the content can never disagree.
-    const result = classifyCapture(text, { source: "clipboard" });
+    const { result, content } = classifyAndFormatCapture(text, {
+      source: "clipboard",
+    });
     const classification = toBlockClassification(result);
     const blockId = allocator.allocateBlockId();
     const block: Block = {
       id: blockId,
       type: result.blockType,
-      content: formatCaptureContent(result, text),
+      content,
       createdAt: now,
       tags: [],
       assetIds: [],

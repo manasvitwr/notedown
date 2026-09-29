@@ -12,7 +12,7 @@ import { parseNotedownFile, createBlockSectionRegex, stripDataSection } from "..
 import { extractAssetIds, extractLinkedReferenceIds, sweepPreservedAssetLines } from "../../lib/assetIds";
 import { serializeDocument } from "../../lib/markdownSerializer";
 import { processPaste } from "../../lib/clipboard";
-import { classifyCapture, formatCaptureContent, toBlockClassification } from "../../lib/classification";
+import { classifyAndFormatCapture, toBlockClassification } from "../../lib/classification";
 import type { Block, EditorMode } from "../../types";
 
 // Debounce between a raw markdown keystroke and the store round-trip.
@@ -102,12 +102,14 @@ export function EditorPane() {
         // pasted into raw markdown still lands as code with its language.
         const freeText = extractFreeTextOutsideBlocks(md);
         if (freeText.trim()) {
-          const result = classifyCapture(freeText, { source: "manual" });
+          const { result, content } = classifyAndFormatCapture(freeText, {
+            source: "manual",
+          });
           const classification = toBlockClassification(result);
           const newBlock: Block = {
             id: allocateBlockId(),
             type: result.blockType,
-            content: formatCaptureContent(result, freeText),
+            content,
             createdAt: new Date().toISOString(),
             tags: [],
             assetIds: extractAssetIds(freeText.trim()),

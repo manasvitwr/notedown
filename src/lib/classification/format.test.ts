@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { formatCaptureContent } from "./format";
-import { classifyCapture } from "./classifier";
+import {
+  classifyAndFormatCapture,
+  formatCaptureContent,
+  parseFence,
+} from "./format";
 
 /** Format a capture exactly as the app stores it: classify, then rewrite. */
 function store(content: string): string {
-  return formatCaptureContent(classifyCapture(content), content);
+  return classifyAndFormatCapture(content).content;
 }
 
 describe("formatCaptureContent", () => {
@@ -35,29 +38,43 @@ describe("formatCaptureContent", () => {
     expect(store(content)).toBe("```python\ndef add(a, b):\n    return a + b\n```");
   });
 
-  it("preserves an explicit fence the user brought, whichever way it classifies", () => {
-    // The policy: a fence that came *with* the capture is the user's, and the
-    // formatter never rewrites it — neither the tag nor the language. A fence
-    // the app wrote from its own classification is a different matter, and is
-    // re-written from the verdict by the store (see useDocumentStore, which
-    // classifies the unwrapped body and fences it again).
-    const proseFence = "```py\nJust a note.\n```";
-    expect(classifyCapture(proseFence).type).toBe("text");
-    expect(store(proseFence)).toBe(proseFence);
+  it("classifies through an incoming fence and re-fences from the verdict", () => {
+    // The policy: a fence that arrives with a capture is a wrapper, not content.
+    // It comes off before classification — so `JSON.parse` sees the body and a
+    // pasted snippet is code rather than text that mentions a fence — and code
+    // output is always re-fenced from the verdict, never from the tag that
+    // happened to come along. This is the same rule the store applies when a
+    // block is re-classified later, applied at the door instead.
+    const pastedJson = '```python\n{"a": 1}\n```';
+    expect(classifyAndFormatCapture(pastedJson).result.language).toBe("json");
+    expect(store(pastedJson)).toBe('```json\n{"a": 1}\n```');
 
-    // A `python` fence around a JSON body: even told the verdict is json, the
-    // formatter leaves the user's fence exactly as typed. A stale language tag
-    // the user wrote themselves is not silently corrected — being wrong about
-    // something someone typed by hand is worse than correcting it for them.
-    const mislabelled = '```python\n{"a": 1}\n```';
+    const pastedPython = "```py\ndef add(a, b):\n    return a + b\n```";
+    expect(classifyAndFormatCapture(pastedPython).result.language).toBe("python");
+    expect(store(pastedPython)).toBe(
+      "```python\ndef add(a, b):\n    return a + b\n```"
+    );
+
+    // Not code: the fence goes away, because a block that is no longer code must
+    // not keep a ``` around it.
+    expect(store("```\nJust a note.\n```")).toBe("Just a note.");
+
+    // Even handed a stale fence directly, the formatter refuses to keep it.
     expect(
-      formatCaptureContent({ type: "code", language: "json" }, mislabelled)
-    ).toBe(mislabelled);
+      formatCaptureContent({ type: "code", language: "json" }, pastedJson)
+    ).toBe('```json\n{"a": 1}\n```');
   });
 
-  it("stores prose and already-fenced code untouched", () => {
+  it("treats an unclosed fence as unfenced content", () => {
+    // Nothing to unwrap, so it is judged as written — and if the verdict is
+    // code, the output is a *closed* fence rather than the broken one.
+    const unclosed = "```python\nprint('hi')";
+    expect(parseFence(unclosed)).toBeNull();
+    const stored = formatCaptureContent({ type: "code", language: "python" }, unclosed);
+    expect(parseFence(stored)?.body).toBe("```python\nprint('hi')");
+  });
+
+  it("stores prose untouched", () => {
     expect(store("Just a note.")).toBe("Just a note.");
-    const fenced = "```py\nx = 1\n```";
-    expect(store(fenced)).toBe(fenced);
   });
 });

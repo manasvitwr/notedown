@@ -351,7 +351,8 @@ describe("classifyCapture", () => {
     expect(classifyCapture(samples[samples.length - 1])).toBe(last);
   });
 
-  it("explains itself for debugging", () => {    const explanation = explainClassification(classifyCapture(JSON_SAMPLE));
+  it("explains itself for debugging", () => {
+    const explanation = explainClassification(classifyCapture(JSON_SAMPLE));
     expect(explanation).toContain("code (json)");
     expect(explanation).toContain("json.parse-ok");
   });

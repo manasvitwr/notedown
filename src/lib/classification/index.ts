@@ -8,10 +8,10 @@ export { clearClassificationCache, classificationKey } from "./hash";
 export { confidenceBand } from "./score";
 export {
   captureTypeOf,
+  classifyAndFormatCapture,
   describeBlockClassification,
   fenceContent,
   formatCaptureContent,
-  isFenced,
   languageLabel,
   parseFence,
   toBlockClassification,

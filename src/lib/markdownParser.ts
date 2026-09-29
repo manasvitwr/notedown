@@ -204,16 +204,19 @@ export function createPlainImport(
  * Read the optional classification attributes out of a block marker, e.g.
  * ` collapsed lang=python src=user conf=1.00 cand=javascript,typescript`.
  *
- * Every value is validated: an unknown language, a non-numeric confidence or a
- * garbage attribute is dropped rather than stored. A marker with no
- * classification attributes (every v1 document) yields `undefined`, which keeps
- * legacy blocks honestly unclassified instead of guessing retroactively.
+ * Every value is validated: an unknown language, a confidence that is not a
+ * plain number in range, or a garbage attribute is dropped rather than stored. A
+ * marker with no classification attributes (every v1 document) yields
+ * `undefined`, which keeps legacy blocks honestly unclassified instead of
+ * guessing retroactively.
  *
  * The confidence floor is the same `MIN_CONFIDENCE` the writer applies, so
  * being classified has exactly one owner: the classifier (or a user override).
  * A hand-edited or truncated marker cannot smuggle in a sub-threshold verdict
  * that no classifier would ever produce.
  */
+const CONF_RE = /^(?:0|1|0\.\d+|1\.0+)$/;
+
 function parseClassification(rawAttrs: string): BlockClassification | undefined {
   const attrs = new Map<string, string>();
   for (const token of (rawAttrs ?? "").trim().split(/\s+/)) {
@@ -223,13 +226,13 @@ function parseClassification(rawAttrs: string): BlockClassification | undefined 
   }
 
   const rawConfidence = attrs.get("conf");
-  const confidence =
-    rawConfidence === undefined ? NaN : Number.parseFloat(rawConfidence);
-  if (!Number.isFinite(confidence) || confidence < MIN_CONFIDENCE) {
-    // No usable confidence means no classification — not a classification with
-    // confidence 0, which would be a state nothing can ever produce.
-    return undefined;
-  }
+  // Strictly numeric, and in range. The writer only ever emits two decimals in
+  // [0, 1], so anything looser is a hand-edited marker: `0.95abc` and `1e5`
+  // both "parse" as numbers to a lenient reader, and a confidence of 999 is not
+  // a verdict anything could have produced.
+  if (!rawConfidence || !CONF_RE.test(rawConfidence)) return undefined;
+  const confidence = Number(rawConfidence);
+  if (confidence < MIN_CONFIDENCE || confidence > 1) return undefined;
 
   const classification: BlockClassification = {
     source: attrs.get("src") === "user" ? "user" : "automatic",

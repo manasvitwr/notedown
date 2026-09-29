@@ -175,6 +175,7 @@ describe("classifyCapture", () => {
       "javascript:alert(1)",
       "data:text/html,<script>alert(1)</script>",
       "see https://example.com for details",
+      "See https://example.com for details",
     ]) {
       const result = classifyCapture(notALink);
       expect(result.type).toBe("text");
@@ -183,6 +184,21 @@ describe("classifyCapture", () => {
       expect(classifyAndFormatCapture(notALink).content).toBe(notALink);
       expect(classifyAndFormatCapture(notALink).content).not.toContain("](");
     }
+  });
+
+  it("14b. a link block holds exactly one link", () => {
+    // Two URLs, or a URL and anything else, is content — not a link. Choosing
+    // one of them would silently discard the other, and the block would then
+    // hold an address nobody typed.
+    const two = "https://a.com\nhttps://b.com";
+    expect(classifyCapture(two).type).not.toBe("link");
+    expect(classifyAndFormatCapture(two).content).not.toContain("](");
+
+    // Prose keeps its own punctuation: the trailing strip is for a URL copied
+    // out of a sentence, never for a sentence.
+    const prose = "Remember to buy milk.";
+    expect(classifyCapture(prose).type).toBe("text");
+    expect(classifyAndFormatCapture(prose).content).toBe(prose);
   });
 
   it("15. image metadata classifies as image without language detection", () => {

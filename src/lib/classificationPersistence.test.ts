@@ -229,6 +229,19 @@ describe("classification persistence", () => {
       "b.nd.md"
     ).blocks[0].classification;
     expect(kept).toEqual({ source: "user", confidence: 0.95, language: "python" });
+
+    // Confidence must be a plain number in [MIN_CONFIDENCE, 1]. A lenient
+    // reader would take 0.95 from "0.95abc" and 100000 from "1e5", and a
+    // confidence of 999 is not a verdict anything could have produced.
+    for (const conf of ["0.95abc", "1e5", "999", "-0.95", "0.9.5", "NaN", "0"]) {
+      expect(
+        parseNotedownFile(
+          marker(` lang=python conf=${conf} src=user`),
+          "b.nd.md"
+        ).blocks[0].classification,
+        conf
+      ).toBeUndefined();
+    }
   });
 
   it("reads `collapsed` as a token, not as a substring", () => {

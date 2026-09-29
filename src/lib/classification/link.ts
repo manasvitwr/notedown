@@ -29,6 +29,18 @@ const BARE_WWW_RE = /^www\.[^\s/$.?#].[^\s]*$/i;
 /** Punctuation a human (or a reader) leaves at the end of a copied URL. */
 const TRAILING_PUNCTUATION = /[.,;:!?)\]}'"]+$/;
 
+/**
+ * Drop the trailing sentence punctuation a copy leaves on a URL.
+ *
+ * Exported so the formatter cannot drift from the detector: the href written
+ * into the markdown link and the label shown for it must be built from the same
+ * stripped text, or "https://example.com." ends up recorded with a full stop in
+ * the URL.
+ */
+export function stripTrailingPunctuation(url: string): string {
+  return url.replace(TRAILING_PUNCTUATION, "");
+}
+
 function parseUrl(candidate: string): URL | null {
   try {
     const url = new URL(candidate);
@@ -39,22 +51,13 @@ function parseUrl(candidate: string): URL | null {
 }
 
 /**
- * A single-line capture that is nothing but a URL. Trailing sentence punctuation
- * is tolerated (people copy "https://example.com." out of prose) but is not
- * part of the URL itself.
- *
- * A Markdown link is deliberately *not* a bare URL: it is already a link, and
- * wrapping it in `[[...]]` would break its own syntax.
- */
-export function isBareUrl(content: string): boolean {
-  const match = detectLink(content);
-  return match !== null && match.kind !== "markdown-link";
-}
-
-/**
  * Detect a link capture. Returns null for anything that is not essentially a
  * single URL: empty content, multi-line content, prose with a link inside it,
  * or an unsupported protocol.
+ *
+ * A Markdown link is deliberately *not* a bare URL: it is already a link, and
+ * wrapping it in another one would break its own syntax. Callers that rewrite
+ * the content check `kind` rather than assuming every match needs wrapping.
  */
 export function detectLink(content: string): LinkMatch | null {
   const trimmed = content.trim();

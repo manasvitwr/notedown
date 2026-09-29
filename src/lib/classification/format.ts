@@ -6,7 +6,7 @@ import type {
   CodeLanguage,
 } from "./types";
 import { LANGUAGE_LABELS, MIN_CONFIDENCE } from "./config";
-import { isBareUrl } from "./link";
+import { detectLink, stripTrailingPunctuation } from "./link";
 
 /**
  * Map a persisted `BlockType` onto the canonical capture taxonomy. `transcript`
@@ -72,9 +72,12 @@ export function formatCaptureContent(
   if (result.type === "link") {
     // A bare URL becomes a markdown link; markdown link syntax the user already
     // captured is left exactly as it is, because wrapping it would break it.
-    if (isBareUrl(trimmed)) {
-      const href = trimmed.startsWith("www.") ? `https://${trimmed}` : trimmed;
-      return `[${trimmed}](${href})`;
+    // The href comes from `detectLink` itself and the label from the same
+    // trailing-punctuation strip, so a copied "https://example.com." cannot end
+    // up with the full stop inside the URL.
+    const match = detectLink(trimmed);
+    if (match && match.kind !== "markdown-link") {
+      return `[${stripTrailingPunctuation(trimmed)}](${match.url})`;
     }
     return trimmed;
   }

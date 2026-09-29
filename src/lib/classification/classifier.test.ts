@@ -261,7 +261,20 @@ describe("classifyCapture", () => {
     );
   });
 
-  it("19. one transcript line inside code stays code", () => {
+  it("20. one chat line is not a transcript", () => {
+    // "Moderator: ..." matches both the speaker pattern and the generic
+    // "Name: ..." pattern, so counting *patterns* would make this single line a
+    // transcript on its own. A transcript is a conversation: it needs a second
+    // turn, which is exactly what TRANSCRIPT_SAMPLE has.
+    const result = classifyCapture("Moderator: thanks for joining us today.");
+    expect(result.blockType).toBe("text");
+    expect(result.type).toBe("text");
+    // The signals still report what fired — the subtype is the decision, not the
+    // evidence.
+    expect(classifyCapture(TRANSCRIPT_SAMPLE).blockType).toBe("transcript");
+  });
+
+  it("21. one transcript line inside code stays code", () => {
     const result = classifyCapture(CODE_WITH_TRANSCRIPT_LINE);
     expect(result.type).toBe("code");
     expect(result.blockType).toBe("code");
@@ -324,7 +337,7 @@ describe("classifyCapture", () => {
     expect(imported.signals.some((s) => s.kind === "context.extension")).toBe(true);
   });
 
-  it("21. a trusted image extension is an image, and never reaches detection", () => {
+  it("a trusted image extension is an image, and never reaches detection", () => {
     const result = classifyCapture("photo-bytes", {
       source: "import",
       filename: "photo.png",
@@ -335,6 +348,15 @@ describe("classifyCapture", () => {
     // Layer 1 settled it; nothing downstream ran.
     expect(result.signals.every((s) => s.layer === 1)).toBe(true);
     expect(result.signals.some((s) => s.kind === "image.extension")).toBe(true);
+
+    // The same filename arriving with pasted text is not a deliberate choice, so
+    // it decides nothing: prose stays prose.
+    const pasted = classifyCapture("Just a note.", {
+      source: "clipboard",
+      filename: "photo.png",
+    });
+    expect(pasted.type).toBe("text");
+    expect(pasted.signals.some((s) => s.kind.startsWith("image."))).toBe(false);
   });
 
   it("22. an imported svg is markup, not an unbacked image block", () => {
@@ -385,6 +407,19 @@ describe("classifyCapture", () => {
     expect(classifyCapture(samples[0])).not.toBe(first);
     // A recent entry is still memoized, and identical by reference.
     expect(classifyCapture(samples[samples.length - 1])).toBe(last);
+  });
+
+  it("an extension that names no language is not evidence", () => {
+    // `.md` is a real import extension that maps to no language. It is trusted,
+    // and it still says nothing: no `context.extension` signal, no language, and
+    // the content's own verdict stands.
+    const result = classifyCapture("Just a plain note.", {
+      source: "import",
+      filename: "notes.md",
+    });
+    expect(result.type).toBe("text");
+    expect(result.language).toBeUndefined();
+    expect(result.signals.some((s) => s.kind === "context.extension")).toBe(false);
   });
 
   it("only calls a capture an image when the asset can be rendered", () => {

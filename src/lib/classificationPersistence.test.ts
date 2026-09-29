@@ -146,6 +146,42 @@ describe("classification persistence", () => {
     expect(parsed.blocks[1].collapsed).toBe(true);
   });
 
+  it("round-trips a collapsed block with its classification intact", () => {
+    // The marker carries a bare flag *and* attribute pairs, so this is the one
+    // place that proves the two can share a line: `collapsed` before the
+    // attributes, the body still fenced, and the user's verdict — which must
+    // never be re-classified away — back on the block.
+    const block: Block = {
+      id: "b_001",
+      type: "code",
+      createdAt: "2025-01-01T00:00:00.000Z",
+      collapsed: true,
+      content: "```python\nprint('hi')\n```",
+      classification: {
+        source: "user",
+        confidence: 1,
+        language: "python",
+      },
+    };
+    const doc: DocumentState = {
+      version: 1,
+      title: "Round trip",
+      createdAt: "2025-01-01T00:00:00.000Z",
+      updatedAt: "2025-01-01T00:00:00.000Z",
+      storageMode: "inline",
+      settings: { inlineImages: false, aiEnabled: false, provider: null, model: null },
+      blocks: [block],
+      assets: [],
+    };
+
+    const parsed = parseNotedownFile(serializeDocument(doc), "round-trip.nd.md");
+
+    expect(parsed.blocks).toHaveLength(1);
+    expect(parsed.blocks[0].collapsed).toBe(true);
+    expect(parsed.blocks[0].classification).toEqual(block.classification);
+    expect(parsed.blocks[0].content).toBe(block.content);
+  });
+
   it("drops a classification that is invalid or below the confidence floor", () => {
     const marker = (attrs: string) =>
       [

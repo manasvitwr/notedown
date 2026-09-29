@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { classifyCapture, explainClassification } from "./classifier";
 import { clearClassificationCache } from "./hash";
 import { captureTypeOf, toBlockClassification } from "./format";
-import { MIN_CONFIDENCE } from "./config";
+import { CACHE_LIMIT, MIN_CONFIDENCE } from "./config";
 import type { ClassificationResult } from "./types";
 
 const PROSE =
@@ -311,6 +311,44 @@ describe("classifyCapture", () => {
     });
     expect(result.type).toBe("code");
     expect(result.signals.some((s) => s.kind.startsWith("image."))).toBe(false);
+  });
+
+  it("memoizes per content *and* context identity", () => {
+    // Same bytes, different provenance: these are different questions, so they
+    // must not share a cache entry. An image is decided by metadata alone, while
+    // the same text with no context is content that still has to be classified.
+    const content = "photo-bytes";
+    const asImage = classifyCapture(content, {
+      mimeType: "image/png",
+      assetIds: ["img_001"],
+    });
+    const asText = classifyCapture(content);
+    expect(asImage).not.toBe(asText);
+    expect(asImage.type).toBe("image");
+    expect(asText.type).not.toBe("image");
+    // And each keeps its own entry.
+    expect(classifyCapture(content, { mimeType: "image/png", assetIds: ["img_001"] })).toBe(
+      asImage
+    );
+    expect(classifyCapture(content)).toBe(asText);
+  });
+
+  it("evicts the oldest entry when the bounded cache overflows", () => {
+    // CACHE_LIMIT is a bound, not a suggestion: past it the least recently used
+    // key is dropped, and a dropped key is recomputed rather than served stale.
+    const samples = Array.from(
+      { length: CACHE_LIMIT + 2 },
+      (_, i) => `def f${i}(a):\n    return a + ${i}\n`
+    );
+    // More distinct keys than the cache can hold, classified in order.
+    const results = samples.map((sample) => classifyCapture(sample));
+    const first = results[0];
+    const last = results[results.length - 1];
+
+    // The oldest was evicted, so this is a fresh result object, not the old one.
+    expect(classifyCapture(samples[0])).not.toBe(first);
+    // A recent entry is still memoized, and identical by reference.
+    expect(classifyCapture(samples[samples.length - 1])).toBe(last);
   });
 
   it("explains itself for debugging", () => {    const explanation = explainClassification(classifyCapture(JSON_SAMPLE));

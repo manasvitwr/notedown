@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { classifyCapture, explainClassification } from "./classifier";
 import { clearClassificationCache } from "./hash";
-import { captureTypeOf } from "./format";
+import { captureTypeOf, toBlockClassification } from "./format";
+import { MIN_CONFIDENCE } from "./config";
 import type { ClassificationResult } from "./types";
 
 const PROSE =
@@ -231,6 +232,60 @@ describe("classifyCapture", () => {
     expect(result.signals.some((s) => s.kind.startsWith("transcript."))).toBe(
       false
     );
+  });
+
+  it("18. an empty capture is text at the reporting floor", () => {
+    // Nothing to classify is still an answer: the type is text, and the only
+    // honest confidence is the floor itself — `MIN_CONFIDENCE`, reported, with
+    // no evidence invented and no language detection attempted.
+    for (const empty of ["", "   \n "]) {
+      const result = classifyCapture(empty);
+      expect(result.type).toBe("text");
+      expect(result.blockType).toBe("text");
+      expect(result.language).toBeUndefined();
+      expect(result.confidence).toBe(MIN_CONFIDENCE);
+      expect(result.signals).toHaveLength(1);
+      expect(result.signals[0].kind).toBe("fallback.empty");
+      expect(result.signals.some((s) => s.layer === 3)).toBe(false);
+    }
+  });
+
+  it("19. the confidence floor is inclusive and matches the parser", () => {
+    // One owner for the boundary: the writer drops results below the floor, and
+    // the parser drops stored markers below it. So a result exactly *at* the
+    // floor is persisted, and a hair below it is not — the same rule, applied
+    // in both directions.
+    const atFloor = toBlockClassification(
+      classifyCapture("")
+    );
+    expect(atFloor).toEqual({ source: "automatic", confidence: MIN_CONFIDENCE });
+
+    const belowFloor = toBlockClassification({
+      ...classifyCapture("Just a note."),
+      confidence: MIN_CONFIDENCE - 0.01,
+    });
+    expect(belowFloor).toBeUndefined();
+  });
+
+  it("20. a filename only decides the language for a real import", () => {
+    // Same content, different provenance. A user importing main.py handed us a
+    // deliberate choice; a filename riding along with pasted text is a guess,
+    // and prose must stay prose.
+    const pasted = classifyCapture("Just a plain note.", {
+      source: "clipboard",
+      filename: "notes.py",
+    });
+    expect(pasted.type).toBe("text");
+    expect(pasted.language).toBeUndefined();
+    expect(pasted.signals.some((s) => s.kind === "context.extension")).toBe(false);
+
+    const imported = classifyCapture("Just a plain note.", {
+      source: "import",
+      filename: "main.py",
+    });
+    expect(imported.type).toBe("code");
+    expect(imported.language).toBe("python");
+    expect(imported.signals.some((s) => s.kind === "context.extension")).toBe(true);
   });
 
   it("explains itself for debugging", () => {    const explanation = explainClassification(classifyCapture(JSON_SAMPLE));

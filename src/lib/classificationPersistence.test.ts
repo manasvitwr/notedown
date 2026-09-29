@@ -231,6 +231,48 @@ describe("classification persistence", () => {
     expect(kept).toEqual({ source: "user", confidence: 0.95, language: "python" });
   });
 
+  it("reads `collapsed` as a token, not as a substring", () => {
+    const marker = (attrs: string) =>
+      [
+        "---",
+        "notedown: 2",
+        'title: "Flags"',
+        'created: "2026-01-01T00:00:00.000Z"',
+        'updated: "2026-01-01T00:00:00.000Z"',
+        'storage: "inline"',
+        "---",
+        "",
+        "# Flags",
+        "",
+        `<!-- nd:block b_001 code 2026-01-01T00:00:00.000Z${attrs} -->`,
+        "body",
+        "<!-- nd:endblock b_001 -->",
+        "",
+      ].join("\n");
+    const valid = { source: "user", confidence: 0.95, language: "python" };
+
+    // The flag is written as its own token. Anything that merely contains the
+    // word — a longer token, an attribute value, a candidate name with a suffix
+    // — has not collapsed the block, and must not be read as having done so.
+    for (const attrs of [
+      " collapsedX lang=python conf=0.95 src=user",
+      " bogus=collapsed lang=python conf=0.95 src=user",
+      " cand=javascript collapsed-foo lang=python conf=0.95 src=user",
+    ]) {
+      const block = parseNotedownFile(marker(attrs), "f.nd.md").blocks[0];
+      expect(block.collapsed, attrs).toBeFalsy();
+      // The rest of the marker is untouched by the bad token.
+      expect(block.classification, attrs).toEqual(valid);
+    }
+
+    expect(
+      parseNotedownFile(
+        marker(" collapsed lang=python conf=0.95 src=user"),
+        "f.nd.md"
+      ).blocks[0]
+    ).toMatchObject({ collapsed: true, classification: valid });
+  });
+
   it("bumps the format version for the added attributes", () => {
     expect(NOTEDOWN_VERSION).toBe(2);
   });

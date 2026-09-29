@@ -3,7 +3,8 @@ import { classifyCapture, explainClassification } from "./classifier";
 import { clearClassificationCache } from "./hash";
 import { captureTypeOf, toBlockClassification } from "./format";
 import { CACHE_LIMIT, MIN_CONFIDENCE } from "./config";
-import type { ClassificationResult } from "./types";
+import { classifyAndFormatCapture } from "./format";
+import type { CaptureContext, CaptureType, ClassificationResult } from "./types";
 
 const PROSE =
   "The team met on Tuesday to review the roadmap and decided to ship the new editor next week.";
@@ -163,6 +164,25 @@ describe("classifyCapture", () => {
   it("14. a markdown link is a link", () => {
     const result = classifyCapture("[www.example.com](http://www.example.com)");
     expect(result.type).toBe("link");
+  });
+
+  it("14. only real web links are links, and nothing smuggles one in", () => {
+    // Link detection is an allowlist, not a blocklist. A `javascript:` or
+    // `data:` URL parses fine as a URL and would otherwise become a clickable
+    // link block the moment the user pasted it — so it is not a link, and
+    // neither is a sentence that merely contains one.
+    for (const notALink of [
+      "javascript:alert(1)",
+      "data:text/html,<script>alert(1)</script>",
+      "see https://example.com for details",
+    ]) {
+      const result = classifyCapture(notALink);
+      expect(result.type).toBe("text");
+      expect(result.signals.some((s) => s.kind.startsWith("link."))).toBe(false);
+      // And nothing rewrites the capture into markdown link syntax.
+      expect(classifyAndFormatCapture(notALink).content).toBe(notALink);
+      expect(classifyAndFormatCapture(notALink).content).not.toContain("](");
+    }
   });
 
   it("15. image metadata classifies as image without language detection", () => {
@@ -365,5 +385,29 @@ describe("classifyCapture", () => {
     const asImport = classifyCapture(PYTHON_SAMPLE, { source: "import" });
     expect(asImport).not.toBe(first);
     expect(asImport.type).toBe("code");
+  });
+
+  it("keeps one cache entry per context identity", () => {
+    // Every part of the context is part of the key, and each of these contexts
+    // is a genuinely different question about the same bytes. Sharing an entry
+    // between them would hand back the wrong answer *and* make a later call for
+    // a different context look memoized when it never was.
+    const content = "Just a plain note.";
+    const cases: Array<[string, CaptureContext, CaptureType]> = [
+      ["import + filename", { source: "import", filename: "a.py" }, "code"],
+      ["clipboard + filename", { source: "clipboard", filename: "a.py" }, "text"],
+      ["explicit extension", { fileExtension: "py" }, "code"],
+      ["typed as image", { blockType: "image" }, "image"],
+    ];
+
+    const results = cases.map(([, context]) => classifyCapture(content, context));
+    cases.forEach(([label, context, type], i) => {
+      const result = results[i];
+      expect(result.type, label).toBe(type);
+      // Memoized: the same context gives back the same object.
+      expect(classifyCapture(content, context), label).toBe(result);
+    });
+    // No two contexts share an entry.
+    expect(new Set(results).size).toBe(cases.length);
   });
 });

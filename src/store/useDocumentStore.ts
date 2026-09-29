@@ -12,8 +12,8 @@ import type {
 import { createEmptyDocument, BLOCK_PREFIX, ASSET_PREFIX } from "../constants/defaults";
 import { serializeDocument } from "../lib/markdownSerializer";
 import {
+  captureTypeOf,
   classifyCapture,
-  fenceContent,
   formatCaptureContent,
   parseFence,
   toBlockClassification,
@@ -317,11 +317,17 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       ...doc,
       blocks: doc.blocks.map((b) => {
         if (b.id !== blockId) return b;
-        const body = parseFence(b.content)?.body ?? b.content;
-        const content =
-          type === "code"
-            ? fenceContent(body, b.classification?.language)
-            : body;
+        // The user's chosen type *is* the verdict here, so the stored markdown
+        // is shaped by the same formatter the capture paths use rather than by
+        // a second copy of the unwrap/fence rule. Naming a language is the other
+        // half of that verdict, and `setBlockLanguage` covers it.
+        const content = formatCaptureContent(
+          {
+            type: captureTypeOf(type),
+            language: type === "code" ? b.classification?.language : undefined,
+          },
+          b.content
+        );
         const next: Block = {
           ...b,
           type,
@@ -350,13 +356,12 @@ export const useDocumentStore = create<DocumentStore>((set, get) => ({
       ...doc,
       blocks: doc.blocks.map((b) => {
         if (b.id !== blockId) return b;
-        const body = parseFence(b.content)?.body ?? b.content;
         // Naming a language implies the block is code, so the fence and the
         // type follow the choice instead of contradicting it.
         const next: Block = {
           ...b,
           type: "code",
-          content: fenceContent(body, language),
+          content: formatCaptureContent({ type: "code", language }, b.content),
           classification: userClassification(language),
           updatedAt: new Date().toISOString(),
         };

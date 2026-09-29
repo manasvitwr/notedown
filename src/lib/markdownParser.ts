@@ -76,11 +76,10 @@ export function parseNotedownFile(
   let match;
   while ((match = blockRegex.exec(contentAfterFrontmatter)) !== null) {
     const [, id, type, createdAt, rawAttrs, rawContent] = match;
-    // Check the original text for the collapsed marker
-    const blockStart = match.index;
-    const blockMarkerEnd = contentAfterFrontmatter.indexOf("-->", blockStart);
-    const blockMarker = contentAfterFrontmatter.slice(blockStart, blockMarkerEnd + 3);
-    const isCollapsed = blockMarker.includes(" collapsed");
+    // `collapsed` is a positional token in the marker, not a substring: a
+    // marker carrying "collapsedX" or an attribute that merely ends in
+    // "collapsed" has not collapsed anything.
+    const isCollapsed = /(?:^|\s)collapsed(?:\s|$)/.test(rawAttrs);
     const content = stripBlockHeading(rawContent.trim());
     const classification = parseClassification(rawAttrs);
     blocks.push({
@@ -242,7 +241,10 @@ function parseClassification(rawAttrs: string): BlockClassification | undefined 
     classification.language = language as CodeLanguage;
   }
   const rawCandidates = attrs.get("cand");
-  if (rawCandidates) {
+  // Runner-up languages are only meaningful when none was chosen — the writer
+  // never emits both, so a marker that has both is hand-edited and the
+  // candidates are noise.
+  if (rawCandidates && !classification.language) {
     const candidates = rawCandidates
       .split(",")
       .map((entry) => entry.trim())
